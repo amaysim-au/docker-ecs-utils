@@ -43,10 +43,10 @@ def read_ecs_config():
     lb_health_check = None
     lb_deregistration_delay = "120"
 
-    if not os.path.isfile("deployment/ecs-config.yml"):
-        sys.exit('ERROR: File ecs-config.yml does not exist')
+    if not os.path.isfile("deployment/ecs-config-env.yml"):
+        sys.exit('ERROR: File ecs-config-env.yml does not exist')
 
-    with open("deployment/ecs-config.yml") as data_file:
+    with open("deployment/ecs-config-env.yml") as data_file:
         data = yaml.load(data_file)
 
     if 'lb_host' in data:
