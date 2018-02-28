@@ -5,24 +5,27 @@ import sys, os, yaml, json, datetime
 import subprocess
 from pprint import pprint
 
-if len(sys.argv) != 5 and len(sys.argv) != 4:
-  exit('Usage: ./deploy.py <APP_NAME> <CLUSTER_NAME> <DESIRED_TASKS> [TASK_DEFINITION_IAM_ROLE]')
+if len(sys.argv) != 4 and len(sys.argv) != 3:
+    exit('Usage: ./deploy.py <APP_NAME> <CLUSTER_NAME> [TASK_DEFINITION_IAM_ROLE]')
 
 vpc_id = None
 ecs_cluster = None
 ecs_service_role = None
 ecs_task_role = None
 alb_listener = None
+alb_listener_public = None
+
+# Default
+ecs_desired_tasks = 2
 
 name = sys.argv[1]
 cluster = sys.argv[2]
-ecs_desired_tasks = sys.argv[3]
 
-if len(sys.argv) == 5:
-    ecs_task_role = sys.argv[4]
+if len(sys.argv) == 4:
+    ecs_task_role = sys.argv[3]
 
 def get_platform(cluster):
-    global vpc_id, ecs_service_role, ecs_cluster, alb_listener
+    global vpc_id, ecs_service_role, ecs_cluster, alb_listener, alb_listener_public
 
     result_json = subprocess.check_output("aws cloudformation list-exports", shell=True)
     result = json.loads(result_json)
@@ -34,14 +37,17 @@ def get_platform(cluster):
             ecs_service_role = export['Value']
         elif export['Name'] == "ecs-"+cluster+"-ECSCluster":
             ecs_cluster = export['Value']
-        elif export['Name'] == "ecs-"+cluster+"-ALBListenerSSL":
+        elif export['Name'] == "ecs-"+cluster+"-ALBIntListenerSSL":
             alb_listener = export['Value']
+        elif export['Name'] == "ecs-"+cluster+"-ALBPublicListenerSSL":
+            alb_listener_public = export['Value']
 
 def read_ecs_config():
     lb_host = None
     lb_path = '/*'
     lb_health_check = None
-    lb_deregistration_delay = "120"
+    lb_deregistration_delay = "30"
+    scheme = 'internal' # internal | public
 
     if not os.path.isfile("deployment/ecs-config-env.yml"):
         sys.exit('ERROR: File ecs-config-env.yml does not exist')
@@ -61,14 +67,21 @@ def read_ecs_config():
     if 'lb_deregistration_delay' in data:
         lb_deregistration_delay = str(data['lb_deregistration_delay'])
 
+    if 'scheme' in data:
+        scheme = data['scheme']
+
     if not lb_path or not lb_health_check:
         sys.exit('ERROR: lb_path and lb_health_check labels must be defined at ecs-config.yml')
+
+    if scheme == 'public' and alb_listener_public == None:
+        sys.exit('ERROR: this cluster is not open to public. Use scheme: internal')
 
     return {
         'lb_host': lb_host,
         'lb_path': lb_path,
         'lb_health_check': lb_health_check,
-        'lb_deregistration_delay': lb_deregistration_delay
+        'lb_deregistration_delay': lb_deregistration_delay,
+        'scheme': scheme
     }
 
 def read_task_definition_port():
@@ -82,8 +95,9 @@ def read_task_definition_port():
 
     return str(port)
 
-def update_target_group_health_check(alb_target_group, lb_health_check):
-    command = "aws elbv2 modify-target-group --target-group-arn '"+alb_target_group+"' --health-check-path '"+lb_health_check+"'"
+def update_target_group_health_check(alb_target_group, lb_health_check, lb_healthy_threshold=2):
+
+    command = "aws elbv2 modify-target-group --target-group-arn '"+alb_target_group+"' --health-check-path '"+lb_health_check+"' --healthy-threshold-count "+str(lb_healthy_threshold)
 
     print("--> RUN: %s" % command)
     subprocess.check_output(command, shell=True)
@@ -124,10 +138,11 @@ def update_listener_rule(alb_listener, alb_target_group, lb_path, lb_host):
     subprocess.check_output(command, shell=True)
 
 def create_task_definition(name):
+    task_definition_name = cluster+"-"+name
     if ecs_task_role:
-        command = "aws ecs register-task-definition --family "+name+" --task-role-arn '"+ecs_task_role+"' --cli-input-json file://${PWD}/deployment/ecs-env.json"
+        command = "aws ecs register-task-definition --family "+task_definition_name+" --task-role-arn '"+ecs_task_role+"' --cli-input-json file://${PWD}/deployment/ecs-env.json"
     else:
-        command = "aws ecs register-task-definition --family "+name+" --cli-input-json file://${PWD}/deployment/ecs-env.json"
+        command = "aws ecs register-task-definition --family "+task_definition_name+" --cli-input-json file://${PWD}/deployment/ecs-env.json"
 
     result_json = subprocess.check_output(command, shell=True)
     result = json.loads(result_json)
@@ -135,6 +150,7 @@ def create_task_definition(name):
 
 def create_alb_target_group(alb_listener, cluster, name):
     target_group_name = cluster+"-"+name
+
     result_json = subprocess.check_output("aws elbv2 create-target-group --name "+target_group_name+" --protocol HTTP --port 80 --vpc-id "+vpc_id+"", shell=True)
     result = json.loads(result_json)
 
@@ -147,6 +163,7 @@ def update_alb_target_group_params(alb_target_group, lb_deregistration_delay):
 
 def get_alb_target_group(cluster, name):
     target_group_name = cluster+"-"+name
+
     result_process = subprocess.Popen("aws elbv2 describe-target-groups --names "+target_group_name, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     result_process.wait()
     result_json,_ = result_process.communicate()
@@ -156,17 +173,17 @@ def get_alb_target_group(cluster, name):
     result = json.loads(result_json)
     return result['TargetGroups'][0]['TargetGroupArn']
 
-def create_ecs_service(name, ecs_task_definition, alb_target_group, port, desired_tasks):
-    lb = "targetGroupArn="+alb_target_group+",containerName="+name+",containerPort="+port
-    command = "aws ecs create-service --cluster '"+ecs_cluster+"' --service-name '"+name+"' --load-balancers '"+lb+"' --task-definition '"+ecs_task_definition+"' --role '"+ecs_service_role+"' --desired-count "+desired_tasks
+def create_ecs_service(name, container_name, ecs_task_definition, alb_target_group, port, desired_tasks):
+    lb = "targetGroupArn="+alb_target_group+",containerName="+container_name+",containerPort="+port
+    command = "aws ecs create-service --cluster '"+ecs_cluster+"' --service-name '"+name+"' --load-balancers '"+lb+"' --task-definition '"+ecs_task_definition+"' --role '"+ecs_service_role+"' --desired-count "+str(desired_tasks)
 
     print("--> RUN: %s" % command)
     subprocess.check_output(command, shell=True)
 
     return name
 
-def update_ecs_service(name, ecs_task_definition, desired_tasks):
-    command = "aws ecs update-service --cluster '"+ecs_cluster+"' --service '"+name+"' --task-definition '"+ecs_task_definition+"' --desired-count "+desired_tasks
+def update_ecs_service(name, ecs_task_definition):
+    command = "aws ecs update-service --cluster '"+ecs_cluster+"' --service '"+name+"' --task-definition '"+ecs_task_definition+"'"
 
     print("--> RUN: %s" % command)
     subprocess.check_output(command, shell=True)
@@ -201,11 +218,12 @@ def wait_ecs_service(name):
 
 def main():
     get_platform(cluster)
+    config = read_ecs_config()
 
     ecs_task_definition = create_task_definition(name)
     print("--> Created Task Definition: %s" % ecs_task_definition)
-    config = read_ecs_config()
 
+    # Internal ALB Target Group
     alb_target_group = get_alb_target_group(cluster, name)
 
     if not alb_target_group:
@@ -220,12 +238,38 @@ def main():
 
     if not exists_ecs_service(name):
         print("--> Creating ECS Service")
-        ecs_service = create_ecs_service(name, ecs_task_definition, alb_target_group, read_task_definition_port(), ecs_desired_tasks)
+        ecs_service = create_ecs_service(name, name, ecs_task_definition, alb_target_group, read_task_definition_port(), ecs_desired_tasks)
     else:
         print("--> Updating ECS Service")
-        update_ecs_service(name, ecs_task_definition, ecs_desired_tasks)
+        update_ecs_service(name, ecs_task_definition)
 
     wait_ecs_service(name)
+
+    # Public ALB Target Group
+    if config['scheme'] == 'public':
+        name_public = 'public-'+name
+
+        alb_target_group_public = get_alb_target_group(cluster, name_public)
+
+        if not alb_target_group_public:
+            print("--> Creating ALB TargetGroup (Public)")
+            alb_target_group_public = create_alb_target_group(alb_listener, cluster, name_public)
+        else:
+            print("--> Got ALB TargetGroup (Public): %s" % alb_target_group_public)
+
+        update_alb_target_group_params(alb_target_group_public, config['lb_deregistration_delay'])
+        update_listener_rule(alb_listener_public, alb_target_group_public, config['lb_path'], config['lb_host'])
+        update_target_group_health_check(alb_target_group_public, config['lb_health_check'])
+
+        if not exists_ecs_service(name_public):
+            print("--> Creating ECS Service (Public)")
+            ecs_service_public = create_ecs_service(name_public, name, ecs_task_definition, alb_target_group_public, read_task_definition_port(), ecs_desired_tasks)
+        else:
+            print("--> Updating ECS Service (Public)")
+            update_ecs_service(name_public, ecs_task_definition)
+
+        wait_ecs_service(name_public)
+
 
 if __name__ == "__main__":
     main()
