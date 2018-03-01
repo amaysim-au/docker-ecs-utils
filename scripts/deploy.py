@@ -102,40 +102,72 @@ def update_target_group_health_check(alb_target_group, lb_health_check, lb_healt
     print("--> RUN: %s" % command)
     subprocess.check_output(command, shell=True)
 
-def update_listener_rule(alb_listener, alb_target_group, lb_path, lb_host):
+
+def should_rule_exist(rule, lb_paths, lb_hosts):
+    # Given a rule is deployed, should it exist according to the configuration supplied?
+    for condition in rule['Conditions']:
+        if x['Field'] == 'path-pattern':
+            if x['Values'][0] not in lb_paths:
+                return False
+        elif x['Field'] == 'host-header':
+            if x['Values'][0] not in lb_hosts:
+                return False
+
+
+def does_rule_exist(rules, lb_path, lb_host):
+    # Given a path (or a path and a host), is a rule currently deployed?
+    for rule in rules:
+        if lb_host != None:
+            path_pattern = [x['Value'] for x in rule['Conditions'] if x['Field'] == 'path-pattern']
+            host_header = [x['Value'] for x in rule['Conditions'] if x['Field'] == 'host-header']
+            if lb_path in path_pattern and lb_host in host_header:
+                return True
+        else:
+            path_pattern = [x['Value'] for x in rule['Conditions'] if x['Field'] == 'path-pattern']
+            if lb_path in path_pattern:
+                return True
+    return False
+
+
+def update_listener_rules(alb_listener, alb_target_group, lb_paths, lb_hosts):
     rules_json = subprocess.check_output("aws elbv2 describe-rules --listener-arn '"+alb_listener+"'", shell=True)
     rules = json.loads(rules_json)
 
-    rule_arn = None
-    rule_priority = str(len(rules["Rules"]))
+    priorities = [x['Priority'] for x in rules['Rules'][0]]
 
-    for rule in rules["Rules"]:
-        if rule["Actions"][0]["TargetGroupArn"] == alb_target_group:
-            rule_arn = rule["RuleArn"]
-            break
+    matching_rules = [x for x in rules['Rules'] if x['Actions'][0]['TargetGroupArn'] == alb_target_group]
 
-    conditions = []
+    for rule in matching_rules:
+        if not should_rule_exist(rule, lb_paths, lb_hosts):
+            # delete rule
 
-    lb_path_condition = {
-        "Field": "path-pattern",
-        "Values": [lb_path]
-    }
-    conditions.append(lb_path_condition)
+    for lb_host in lb_host:
+        for lb_path in lb_paths:
+            if does_rule_exist(rules, lb_path, lb_host):
+                # update rule
+            else:  # rule is not currently deployed, we must create it
+                i = 1
+                while not rule_priority:  # increment from 1 onwards until we find a priority that is unused
+                    if not index in priorities:
+                        rule_priority = index
+                        priorities.append(rule_priority)
+                    else:
+                        i = i + 1
+                conditions = []
+                lb_path_condition = {
+                    "Field": "path-pattern",
+                    "Values": [lb_path]
+                }
+                conditions.append(lb_path_condition)
 
-    if lb_host != None:
-        lb_host_condition = {
-            "Field": "host-header",
-            "Values": [lb_host]
-        }
-        conditions.append(lb_host_condition)
+                if lb_host != None:
+                    lb_host_condition = {
+                        "Field": "host-header",
+                        "Values": [lb_host]
+                    }
+                    conditions.append(lb_host_condition)
+                # create rule
 
-    if rule_arn:
-        command = "aws elbv2 modify-rule --rule-arn "+rule_arn+" --conditions '"+json.dumps(conditions)+"'"
-    else:
-        command = "aws elbv2 create-rule --listener-arn "+alb_listener+" --priority "+rule_priority+" --conditions '"+json.dumps(conditions)+"' --actions Type=forward,TargetGroupArn="+alb_target_group+""
-
-    print("--> RUN: %s" % command)
-    subprocess.check_output(command, shell=True)
 
 def create_task_definition(name):
     task_definition_name = cluster+"-"+name
