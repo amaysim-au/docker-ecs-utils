@@ -177,9 +177,7 @@ def create_or_update_stack(stack_name, template, parameters):
 
 
 def _parse_template(template):
-    with open(template) as template_fileobj:
-        template_data = template_fileobj.read()
-    cf.validate_template(TemplateBody=template_data)
+    cf.validate_template(TemplateBody=template)
     return template_data
 
 
@@ -204,9 +202,15 @@ def json_serial(obj):
 def main():
 	template = open('/ecs-app.yml','r'),read()
 	config = yaml.safe_load(open('deployment/ecs-config.yml','r'),read())
-	task_definition = open('deployment/ecs.json','r'),read()
-	config.append({'task_definition': task_definition})
+	task_definition = json.loads(open('deployment/ecs.json','r'),read())
 
+    client = boto3.client('ecs')
+    response = client.register_task_definition(
+        family = '{app}-{env}'.format(app=config['app_name'], env=os.environ['ENV']),
+        taskRoleArn = config['task_role_arn'],
+        containerDefinitions=task_definition
+    }
+    config.append({'task_definition_arn': response['taskDefinition']['taskDefinitionArn']})
 	rendered_template = jinja2.Template(template).render(config)
 
 	parameters = {}  # what parameters will the template have?
