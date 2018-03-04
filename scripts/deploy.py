@@ -196,27 +196,27 @@ def json_serial(obj):
     if isinstance(obj, datetime):
         serial = obj.isoformat()
         return serial
-	raise TypeError("Type not serializable")
+    raise TypeError("Type not serializable")
 
 
 def main():
-	template = open('/ecs-app.yml','r'),read()
-	config = yaml.safe_load(open('deployment/ecs-config.yml','r'),read())
-	task_definition = json.loads(open('deployment/ecs.json','r'),read())
+    template = open('/ecs-app.yml','r'),read()
+    config = yaml.safe_load(open('deployment/ecs-config.yml','r'),read())
+    task_definition = json.loads(open('deployment/ecs.json','r'),read())
 
     client = boto3.client('ecs')
     response = client.register_task_definition(
         family = '{app}-{env}'.format(app=config['app_name'], env=os.environ['ENV']),
         taskRoleArn = config['task_role_arn'],
         containerDefinitions=task_definition
-    }
+    )
     config.append({'task_definition_arn': response['taskDefinition']['taskDefinitionArn']})
-	rendered_template = jinja2.Template(template).render(config)
+    rendered_template = jinja2.Template(template).render(config)
 
-	parameters = {}  # what parameters will the template have?
+    parameters = {}  # what parameters will the template have?
 
     stack_name = "MV-{env}-{app_name}-{version}-{realm}".format(env=os.environ['ENV'], app_name=config['ecs_app_name'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
-	create_or_update_stack(stack_name, rendered_template, parameters)
+    create_or_update_stack(stack_name, rendered_template, parameters)
 
 
 if __name__ == "__main__":
