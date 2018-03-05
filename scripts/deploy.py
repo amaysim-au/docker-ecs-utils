@@ -7,8 +7,8 @@ from pprint import pprint
 import unittest
 from unittest.mock import patch
 from functools import reduce
-import jinja2
 import ruamel.yaml as yaml
+import re
 
 vpc_id = None
 ecs_cluster = None
@@ -199,10 +199,85 @@ def json_serial(obj):
     raise TypeError("Type not serializable")
 
 
+def change_default_rule_tg(alb_listener, target_group):
+    client = boto3.client('elbv2')
+    response = client.modify_listener(
+        ListenerArn=alb_listener,
+        DefaultActions=[
+            {
+                'Type': 'forward',
+                'TargetGroupArn': target_group
+            }
+        ]
+    )
+    return response
+
+
+class GenerateEnvironmentObjectTest(unittest.TestCase):
+    @patch('builtins.open', unittest.mock.mock_open(read_data="ENV\nREALM\nECS_APP_NAME\nAWS_SECRET_ACCESS_KEY"))
+    @patch.dict('os.environ', {'ENV': 'Dev', 'REALM': 'NonProd', 'AWS_SECRET_ACCESS_KEY': "I should not be present"})
+    def test_1(self):
+        """Test with variables present in .env and in working environment"""
+        expected_environment = [
+            {
+                "name": "ENV",
+                "value": "Dev"
+            },
+            {
+                "name": "REALM",
+                "value": "NonProd"
+            },
+            {
+                "name": "ECS_APP_NAME",
+                "value": ""
+            }
+        ]
+        environment = generate_environment_object()
+        self.assertEqual(environment, expected_environment)
+
+    @patch('builtins.open', unittest.mock.mock_open(read_data="ENV\n\n\nREALM\n#asdfasdf\nECS_APP_NAME\nAWS_SECRET_ACCESS_KEY"))
+    @patch.dict('os.environ', {'ENV': 'asdfsa!!asdfasdf#asdf', 'REALM': '""asdf\'asdfdfas{"asdf":"asdfa\'sd"}', 'AWS_SECRET_ACCESS_KEY': "I should not be present #          "})
+    def test_2(self):
+        """Test with weird formatting and characters in .env"""
+        expected_environment = [
+            {
+                "name": "ENV",
+                "value": "asdfsa!!asdfasdf#asdf"
+            },
+            {
+                "name": "REALM",
+                "value": '""asdf\'asdfdfas{"asdf":"asdfa\'sd"}'
+            },
+            {
+                "name": "ECS_APP_NAME",
+                "value": ""
+            }
+        ]
+        environment = generate_environment_object()
+        self.assertEqual(environment, expected_environment)
+
+def generate_environment_object():
+    environment = []
+    env_file = open('.env', 'r').read()
+    for env in env_file.split('\n'):
+        if env not in ["AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECURITY_TOKEN"] and env != '' and not re.match(r'^\s?#', env):
+            environment.append(
+                {
+                    "name": env,
+                    "value": os.environ.get(env, "")
+                }
+            )
+    return environment
+
+
 def main():
-    template = open('/ecs-app.yml','r'),read()
+    template = open('/ecs-app.yml','r').read()
     config = yaml.safe_load(open('deployment/ecs-config.yml','r'),read())
     task_definition = json.loads(open('deployment/ecs.json','r'),read())
+
+    environment = generate_environment_object()
+    for index, value in enumerate(task_definition['containerDefinitions']):
+        task_definition['containerDefinitions'][index]['environment'] = environment
 
     client = boto3.client('ecs')
     response = client.register_task_definition(
@@ -211,12 +286,11 @@ def main():
         containerDefinitions=task_definition
     )
     config.append({'task_definition_arn': response['taskDefinition']['taskDefinitionArn']})
-    rendered_template = jinja2.Template(template).render(config)
 
     parameters = {}  # what parameters will the template have?
 
-    stack_name = "MV-{env}-{app_name}-{version}-{realm}".format(env=os.environ['ENV'], app_name=config['ecs_app_name'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
-    create_or_update_stack(stack_name, rendered_template, parameters)
+    stack_name = "MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=config['ecs_app_name'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
+    create_or_update_stack(stack_name, template, parameters)
 
 
 if __name__ == "__main__":
