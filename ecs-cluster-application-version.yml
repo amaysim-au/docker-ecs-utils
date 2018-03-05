@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: ECS Cluster Application Version
+
+Parameters:
+  Name:
+    Type: String
+    Description: Name of this Application
+    ConstraintDescription: Must be DNS friendly
+    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9\-]+$
+  ClusterName:
+    Type: String
+    Description: Name of the ECS cluster to use
+    ConstraintDescription: Must be DNS friendly
+    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9\-]+$
+  Environment:
+    Description: Environment
+    Type: String
+    Default: Dev
+    AllowedValues:
+      - Dev
+      - QA
+      - PreProd
+      - Production
+  Version:
+    Type: String
+  HealthCheckPath:
+    Description: Healthcheck Path used on TargetGroup
+    Type: String
+    Default: /
+  TaskDefinitionArn:
+    Description: ARN of Task Definition revision to Deploy to this service
+    Type: String
+  ContainerPort:
+    Description: Port container listens
+    Type: String
+  RulePriority:
+    Description: Listerner Rule Priority
+    Type: Number
+
+Mappings:
+  Common:
+    Dev:
+      VPC: vpc
+    QA:
+      VPC: vpc
+    PreProd:
+      VPC: vpc
+    Production:
+      VPC: vpc-Prod
+
+Resources:
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: !Ref HealthCheckPath
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId:
+        Fn::ImportValue: !FindInMap [Common, !Ref Environment, VPC]
+
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: ALBTargetGroup
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Sub "${Name}-${Version}.*"
+      ListenerArn:
+        Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBListenerSSL"
+      Priority: !Ref RulePriority
+
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: ListenerRule
+    Properties:
+      ServiceName: !Sub "${Name}-${Environment}-${Version}"
+      TaskDefinition: !Ref TaskDefinitionArn
+      DesiredCount: 1
+      Cluster:
+        Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSClusterArn"
+      Role:
+        Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSServiceRole"
+      LoadBalancers:
+        - ContainerName: !Sub "${Name}"
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref ALBTargetGroup
+      PlacementConstraints:
+        - Type: distinctInstance
+      DeploymentConfiguration:
+        MaximumPercent: 100
+        MinimumHealthyPercent: 0
