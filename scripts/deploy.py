@@ -10,52 +10,6 @@ from functools import reduce
 import ruamel.yaml as yaml
 import re
 
-vpc_id = None
-ecs_cluster = None
-ecs_service_role = None
-ecs_task_role = None
-alb_listener = None
-alb_listener_public = None
-
-# Default
-ecs_desired_tasks = 2
-
-def get_platform(cluster):
-    global vpc_id, ecs_service_role, ecs_cluster, alb_listener, alb_listener_public
-
-    result_json = subprocess.check_output("aws cloudformation list-exports", shell=True)
-    result = json.loads(result_json)
-
-    for export in result['Exports']:
-        if export['Name'] == "vpc":
-            vpc_id = export['Value']
-        elif export['Name'] == "ecs-"+cluster+"-ECSServiceRole":
-            ecs_service_role = export['Value']
-        elif export['Name'] == "ecs-"+cluster+"-ECSCluster":
-            ecs_cluster = export['Value']
-        elif export['Name'] == "ecs-"+cluster+"-ALBIntListenerSSL":
-            alb_listener = export['Value']
-        elif export['Name'] == "ecs-"+cluster+"-ALBPublicListenerSSL":
-            alb_listener_public = export['Value']
-
-def read_task_definition_port():
-    with open("deployment/ecs-env.json") as data_file:
-        data = json.load(data_file)
-
-    try:
-        port = data['containerDefinitions'][0]['portMappings'][0]['containerPort']
-    except KeyError:
-        sys.exit("ERROR: ecs.json: First container definition must have a containerPort")
-
-    return str(port)
-
-def update_target_group_health_check(alb_target_group, lb_health_check, lb_healthy_threshold=2):
-
-    command = "aws elbv2 modify-target-group --target-group-arn '"+alb_target_group+"' --health-check-path '"+lb_health_check+"' --healthy-threshold-count "+str(lb_healthy_threshold)
-
-    print("--> RUN: %s" % command)
-    subprocess.check_output(command, shell=True)
-
 
 class GetPriorityTest(unittest.TestCase):
     def test_1(self):
@@ -87,57 +41,6 @@ def get_priority(rules):
             return i
         else:
             i = i + 1
-
-def update_listener_rule(alb_listener, alb_target_group, lb_path, lb_host):
-    rules_json = subprocess.check_output("aws elbv2 describe-rules --listener-arn '"+alb_listener+"'", shell=True)
-    rules = json.loads(rules_json)
-
-    rule_arn = None
-    rule_priority = str(len(rules["Rules"]))
-
-    for rule in rules["Rules"]:
-        if rule["Actions"][0]["TargetGroupArn"] == alb_target_group:
-            rule_arn = rule["RuleArn"]
-            break
-
-    conditions = []
-
-    lb_path_condition = {
-        "Field": "path-pattern",
-        "Values": [lb_path]
-    }
-    conditions.append(lb_path_condition)
-
-    if lb_host != None:
-        lb_host_condition = {
-            "Field": "host-header",
-            "Values": [lb_host]
-        }
-        conditions.append(lb_host_condition)
-
-    if rule_arn:
-        command = "aws elbv2 modify-rule --rule-arn "+rule_arn+" --conditions '"+json.dumps(conditions)+"'"
-    else:
-        command = "aws elbv2 create-rule --listener-arn "+alb_listener+" --priority "+rule_priority+" --conditions '"+json.dumps(conditions)+"' --actions Type=forward,TargetGroupArn="+alb_target_group+""
-
-    print("--> RUN: %s" % command)
-    subprocess.check_output(command, shell=True)
-
-def update_alb_target_group_params(alb_target_group, lb_deregistration_delay):
-    subprocess.check_output("aws elbv2 modify-target-group-attributes --target-group-arn "+alb_target_group+" --attributes Key=deregistration_delay.timeout_seconds,Value="+lb_deregistration_delay, shell=True)
-
-
-def get_alb_target_group(cluster, name):
-    target_group_name = cluster+"-"+name
-
-    result_process = subprocess.Popen("aws elbv2 describe-target-groups --names "+target_group_name, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    result_process.wait()
-    result_json,_ = result_process.communicate()
-    if result_process.returncode == 255:
-        return None
-
-    result = json.loads(result_json)
-    return result['TargetGroups'][0]['TargetGroupArn']
 
 
 def create_or_update_stack(stack_name, template, parameters):
@@ -199,20 +102,6 @@ def json_serial(obj):
     raise TypeError("Type not serializable")
 
 
-def change_default_rule_tg(alb_listener, target_group):
-    client = boto3.client('elbv2')
-    response = client.modify_listener(
-        ListenerArn=alb_listener,
-        DefaultActions=[
-            {
-                'Type': 'forward',
-                'TargetGroupArn': target_group
-            }
-        ]
-    )
-    return response
-
-
 class GenerateEnvironmentObjectTest(unittest.TestCase):
     @patch('builtins.open', unittest.mock.mock_open(read_data="ENV\nREALM\nECS_APP_NAME\nAWS_SECRET_ACCESS_KEY"))
     @patch.dict('os.environ', {'ENV': 'Dev', 'REALM': 'NonProd', 'AWS_SECRET_ACCESS_KEY': "I should not be present"})
@@ -272,8 +161,8 @@ def generate_environment_object():
 
 def main():
     template = open('/ecs-app.yml','r').read()
-    config = yaml.safe_load(open('deployment/ecs-config.yml','r'),read())
-    task_definition = json.loads(open('deployment/ecs.json','r'),read())
+    config = yaml.safe_load(open('deployment/ecs-config.yml','r').read())
+    task_definition = json.loads(open('deployment/ecs.json','r').read())
 
     environment = generate_environment_object()
     for index, value in enumerate(task_definition['containerDefinitions']):
@@ -289,7 +178,7 @@ def main():
 
     parameters = {}  # what parameters will the template have?
 
-    stack_name = "MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=config['ecs_app_name'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
+    stack_name = "MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
     create_or_update_stack(stack_name, template, parameters)
 
 
