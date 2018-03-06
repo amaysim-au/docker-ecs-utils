@@ -149,3 +149,19 @@ Resources:
         TargetValue: !Ref AutoscalingTargetValue
         PredefinedMetricSpecification:
           PredefinedMetricType: ECSServiceAverageCPUUtilization
+
+  Route53ALB:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      Name: !Sub
+        - "${Name}-${Version}.${HostedZoneName}"
+        - HostedZoneName: !ImportValue
+            Fn::Sub: "ecs-${ClusterName}-${Name}-${Environment}-HostedZoneName"
+      HostedZoneName:
+        Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-HostedZoneName"
+      Type: A
+      AliasTarget:
+        HostedZoneId:
+          Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBCanonicalHostedZoneID"
+        DNSName:
+          Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBDNSName"
