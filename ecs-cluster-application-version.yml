@@ -83,7 +83,6 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: ListenerRule
     Properties:
-      ServiceName: !Sub "${Name}-${Environment}-${Version}"
       TaskDefinition: !Ref TaskDefinitionArn
       DesiredCount: 1
       Cluster:
@@ -94,8 +93,3 @@ Resources:
         - ContainerName: !Sub "${Name}"
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref ALBTargetGroup
-      PlacementConstraints:
-        - Type: distinctInstance
-      DeploymentConfiguration:
-        MaximumPercent: 100
-        MinimumHealthyPercent: 0
