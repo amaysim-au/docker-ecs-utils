@@ -133,7 +133,7 @@ Resources:
         - "service/${ECSCluster}/${ServiceName}"
         - ECSCluster:
             "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSCluster"
-        - ServiceName: !GetAtt ECSService.Name
+          ServiceName: !GetAtt ECSService.Name
       RoleARN:
         "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSAutoscalingRoleArn"
       ScalableDimension: ecs:service:DesiredCount
