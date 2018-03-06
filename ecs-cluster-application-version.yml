@@ -37,6 +37,10 @@ Parameters:
   RulePriority:
     Description: Listerner Rule Priority
     Type: Number
+  DeregistrationDelay:
+    Description: Target Group Deregistration Delay timeout in seconds
+    Type: Number
+    Default: 30
 
 Mappings:
   Common:
@@ -61,6 +65,9 @@ Resources:
       Port: 80
       Protocol: HTTP
       UnhealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: !Ref DeregistrationDelay
       VpcId:
         Fn::ImportValue: !FindInMap [Common, !Ref Environment, VPC]
 
