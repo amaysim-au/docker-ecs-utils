@@ -41,6 +41,28 @@ Parameters:
     Description: Target Group Deregistration Delay timeout in seconds
     Type: Number
     Default: 30
+  Autoscaling:
+    Description: Enable Autoscaling
+    Type: String
+    Default: Disable
+    AllowedValues:
+      - Enable
+      - Disable
+  AutoscalingTargetValue:
+    Description: Target CPU for Autoscaling
+    Type: Number
+    Default: 75
+  AutoscalingMaxSize:
+    Description: Max number of containers to autoscale
+    Type: Number
+    Default: 16
+  AutoscalingMinSize:
+    Description: Min number of containers to autoscale
+    Type: Number
+    Default: 2
+
+Conditions:
+  isAutoscaling: !Equals [ !Ref Autoscaling, 'Enable']
 
 Mappings:
   Common:
@@ -100,3 +122,30 @@ Resources:
         - ContainerName: !Sub "${Name}"
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref ALBTargetGroup
+
+  ServiceScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Condition: isAutoscaling
+    Properties:
+      MaxCapacity: !Ref AutoscalingMaxSize
+      MinCapacity: !Ref AutoscalingMinSize
+      ResourceId: !Sub
+        - "service/${ECSCluster}/${ServiceName}"
+        - ECSCluster:
+            "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSCluster"
+        - ServiceName: !GetAtt ECSService.Name
+      RoleARN:
+        "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSAutoscalingRoleArn"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+  ServiceScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: isAutoscaling
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-scale-target'
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref AutoscalingTargetValue
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
