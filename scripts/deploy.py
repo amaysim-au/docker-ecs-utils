@@ -7,7 +7,6 @@ from pprint import pprint
 import unittest
 from unittest.mock import patch
 from functools import reduce
-import ruamel.yaml as yaml
 import re
 import time
 
@@ -168,8 +167,16 @@ def get_list_of_rules():
 def main():
     print("Beginning deployment of {}...".format(os.environ['ECS_APP_NAME']))
 
+    template_path = os.environ.get('ECS_APP_VERSION_TEMPLATE_PATH', '/scripts/ecs-cluster-application-version.yml')
+    stack_name = "MV-{realm}-{app_name}-{version}-{env}".format(
+        env=os.environ['ENV'],
+        app_name=os.environ['ECS_APP_NAME'],
+        version=os.environ['BUILD_VERSION'],
+        realm=os.environ['REALM']
+    )
+
     print("Loading configuration files...")
-    template = open(os.environ['ECS_APP_VERSION_TEMPLATE_PATH'],'r').read()
+    template = open(template_path, 'r').read()
     config = yaml.safe_load(open('deployment/ecs-config.yml','r').read())
     task_definition = json.loads(open('deployment/ecs-env.json','r').read())
 
@@ -178,31 +185,7 @@ def main():
     for index, value in enumerate(task_definition['containerDefinitions']):
         task_definition['containerDefinitions'][index]['environment'] = environment
 
-    print("Uploading Task Definition...")
-    ecs = boto3.client('ecs')
-    response = ecs.register_task_definition(**task_definition)
-    task_definition_arn = response['taskDefinition']['taskDefinitionArn']
-    print("Task Definition ARN: {}".format(task_definition_arn))
-
-    priority = None
-    listener_rule = None
-    try:
-        cloudformation = boto3.client('cloudformation')
-        response = cloudformation.describe_stack_resources(
-            StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM']),
-            LogicalResourceId='ListenerRule'
-        )
-        listener_rule = response['StackResources'][0]['PhysicalResourceId']
-        print("Listener Rule already exists, not setting priority.")
-    except:
-        pass
-    if listener_rule == None:
-        print("Determining ALB Rule priority for new rule...")
-        rules = get_list_of_rules()
-        priority = get_priority(rules)
-    print("Rule priority is {}.".format(priority))
-
-    print("Generating Parmeters for CloudFormation template ({})".format(os.environ['ECS_APP_VERSION_TEMPLATE_PATH']))
+    print("Generating Parmeters for CloudFormation template ({})".format(template_path))
     container_port = [x['portMappings'][0]['containerPort'] for x in task_definition['containerDefinitions'] if x['name'] == os.environ['ECS_APP_NAME']][0]
 
     parameters = [
@@ -229,12 +212,41 @@ def main():
         {
             "ParameterKey": 'ContainerPort',
             "ParameterValue": str(container_port)
-        },
+        }
+    ]
+
+
+    print("Uploading Task Definition...")
+    ecs = boto3.client('ecs')
+    response = ecs.register_task_definition(**task_definition)
+    task_definition_arn = response['taskDefinition']['taskDefinitionArn']
+    print("Task Definition ARN: {}".format(task_definition_arn))
+
+    print("Determining ALB Rule priority...")
+    priority = None
+    listener_rule = None
+    try:
+        cloudformation = boto3.client('cloudformation')
+        response = cloudformation.describe_stack_resources(
+            StackName=stack_name,
+            LogicalResourceId='ListenerRule'
+        )
+        listener_rule = response['StackResources'][0]['PhysicalResourceId']
+        print("Listener Rule already exists, not setting priority.")
+    except:
+        pass
+    if listener_rule == None:
+        rules = get_list_of_rules()
+        priority = get_priority(rules)
+    print("Rule priority is {}.".format(priority))
+
+    print("Appending additional parameters...")
+    parameters.append(
         {
             "ParameterKey": 'TaskDefinitionArn',
             "ParameterValue": task_definition_arn
         }
-    ]
+    )
 
     if priority != None:
         parameters.append({
@@ -267,7 +279,7 @@ def main():
             "ParameterValue": str(config['autoscaling_min_size'])
         })
 
-    print("Finished generating Parameters:")
+    print("Finished generating parameters:")
     for param in parameters:
         print("{:30}{}".format(param['ParameterKey'] + ':', param.get('ParameterValue', None)))
 
@@ -290,29 +302,28 @@ def main():
         }
     ]
 
-    stack_name = "MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
     print("Deploying CloudFormation stack: {}".format(stack_name))
     start_time = datetime.datetime.now()
     response = create_or_update_stack(stack_name, template, parameters, tags)
     elapsed_time = datetime.datetime.now() - start_time
     print("CloudFormation stack deploy completed in {}.".format(elapsed_time))
 
+    print("Polling Target Group ({}) until a successful state is reached...".format(stack_name))
     elbv2 = boto3.client('elbv2')
     waiter = elbv2.get_waiter('target_in_service')
     cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stack_resources(
-        StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM']),
+        StackName=stack_name,
         LogicalResourceId='ALBTargetGroup'
     )
     target_group = response['StackResources'][0]['PhysicalResourceId']
-    print("Polling Target Group ({}) until a successful state is reached...".format(stack_name))
     start_time = datetime.datetime.now()
     try:
         waiter.wait(TargetGroupArn=target_group)
     except botocore.exceptions.WaiterError:
         print('Health check did not pass!')
         response = cloudformation.describe_stack_resources(
-            StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM']),
+            StackName=stack_name,
             LogicalResourceId='ECSService'
         )
         service = response['StackResources'][0]['PhysicalResourceId']
