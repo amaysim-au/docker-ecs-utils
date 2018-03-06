@@ -9,24 +9,26 @@ from unittest.mock import patch
 from functools import reduce
 import ruamel.yaml as yaml
 import re
+import time
+
 
 
 class GetPriorityTest(unittest.TestCase):
     def test_1(self):
         """Simple test to get next priority"""
-        rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:listener-rule/app/ECS-InternalTools-Dev/ba564ec55606a717/9c431593f1c78965/2cc6c973c4d32f55","Priority":"1","Conditions":[{"Field":"host-header","Values":["host1.asdf.com"]},{"Field":"path-pattern","Values":["/path2"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:listener-rule/app/ECS-InternalTools-Dev/ba564ec55606a717/9c431593f1c78965/f9994e3e3a55d6dd","Priority":"2","Conditions":[{"Field":"path-pattern","Values":["/path1"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:listener-rule/app/ECS-InternalTools-Dev/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
+        rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/2cc6c973c4d32f55","Priority":"1","Conditions":[{"Field":"host-header","Values":["host1.asdf.com"]},{"Field":"path-pattern","Values":["/path2"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/f9994e3e3a55d6dd","Priority":"2","Conditions":[{"Field":"path-pattern","Values":["/path1"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
         priority = get_priority(rules)
         self.assertEqual(priority, 3)
 
     def test_2(self):
         """Test with gap in list of priorities"""
-        rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:listener-rule/app/ECS-InternalTools-Dev/ba564ec55606a717/9c431593f1c78965/5cdf34d5cf48fabc","Priority":"1","Conditions":[{"Field":"path-pattern","Values":["/asdffdas"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:listener-rule/app/ECS-InternalTools-Dev/ba564ec55606a717/9c431593f1c78965/2cc6c973c4d32f55","Priority":"2","Conditions":[{"Field":"host-header","Values":["host1.asdf.com"]},{"Field":"path-pattern","Values":["/path2"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:listener-rule/app/ECS-InternalTools-Dev/ba564ec55606a717/9c431593f1c78965/284a6e35adc73d71","Priority":"5","Conditions":[{"Field":"path-pattern","Values":["/32452345"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:listener-rule/app/ECS-InternalTools-Dev/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
+        rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/5cdf34d5cf48fabc","Priority":"1","Conditions":[{"Field":"path-pattern","Values":["/asdffdas"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/2cc6c973c4d32f55","Priority":"2","Conditions":[{"Field":"host-header","Values":["host1.asdf.com"]},{"Field":"path-pattern","Values":["/path2"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/284a6e35adc73d71","Priority":"5","Conditions":[{"Field":"path-pattern","Values":["/32452345"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
         priority = get_priority(rules)
         self.assertEqual(priority, 3)
 
     def test_3(self):
         """Test with no rules except default"""
-        rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:listener-rule/app/ECS-InternalTools-Dev/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:434027879415:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
+        rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
         priority = get_priority(rules)
         self.assertEqual(priority, 1)
 
@@ -42,8 +44,9 @@ def get_priority(rules):
         else:
             i = i + 1
 
+cf = boto3.client('cloudformation')
 
-def create_or_update_stack(stack_name, template, parameters):
+def create_or_update_stack(stack_name, template, parameters, tags):
     'Update or create stack'
 
     template_data = _parse_template(template)
@@ -52,6 +55,7 @@ def create_or_update_stack(stack_name, template, parameters):
         'StackName': stack_name,
         'TemplateBody': template_data,
         'Parameters': parameters,
+        'Tags': tags
     }
 
     try:
@@ -72,16 +76,12 @@ def create_or_update_stack(stack_name, template, parameters):
         else:
             raise
     else:
-        print(json.dumps(
-            cf.describe_stacks(StackName=stack_result['StackId']),
-            indent=2,
-            default=json_serial
-        ))
+        return cf.describe_stacks(StackName=stack_result['StackId'])
 
 
 def _parse_template(template):
     cf.validate_template(TemplateBody=template)
-    return template_data
+    return template
 
 
 def _stack_exists(stack_name):
@@ -92,14 +92,6 @@ def _stack_exists(stack_name):
         if stack_name == stack['StackName']:
             return True
     return False
-
-
-def json_serial(obj):
-    """JSON serializer for objects not serializable by default json code"""
-    if isinstance(obj, datetime):
-        serial = obj.isoformat()
-        return serial
-    raise TypeError("Type not serializable")
 
 
 class GenerateEnvironmentObjectTest(unittest.TestCase):
@@ -145,10 +137,12 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
         environment = generate_environment_object()
         self.assertEqual(environment, expected_environment)
 
+
 def generate_environment_object():
     environment = []
     env_file = open('.env', 'r').read()
     for env in env_file.split('\n'):
+        env = env.split('=')[0]
         if env not in ["AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECURITY_TOKEN"] and env != '' and not re.match(r'^\s?#', env):
             environment.append(
                 {
@@ -158,28 +152,197 @@ def generate_environment_object():
             )
     return environment
 
+def get_list_of_rules():
+    cloudformation = boto3.client('cloudformation')
+    response = cloudformation.describe_stack_resources(
+        StackName='ECS-{cluster_name}-App-{app_name}'.format(env=os.environ['ENV'], cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], realm=os.environ['REALM']),
+        LogicalResourceId='ALBListenerSSL'
+    )
+    alb_listener = response['StackResources'][0]['PhysicalResourceId']
+
+    client = boto3.client('elbv2')
+    response = client.describe_rules(ListenerArn = alb_listener)
+    return response['Rules']
+
 
 def main():
-    template = open('/ecs-app.yml','r').read()
-    config = yaml.safe_load(open('deployment/ecs-config.yml','r').read())
-    task_definition = json.loads(open('deployment/ecs.json','r').read())
+    print("Beginning deployment of {}...".format(os.environ['ECS_APP_NAME']))
 
+    print("Loading configuration files...")
+    template = open(os.environ['ECS_APP_VERSION_TEMPLATE_PATH'],'r').read()
+    config = yaml.safe_load(open('deployment/ecs-config.yml','r').read())
+    task_definition = json.loads(open('deployment/ecs-env.json','r').read())
+
+    print("Generating environment variable configuration...")
     environment = generate_environment_object()
     for index, value in enumerate(task_definition['containerDefinitions']):
         task_definition['containerDefinitions'][index]['environment'] = environment
 
-    client = boto3.client('ecs')
-    response = client.register_task_definition(
-        family = '{app}-{env}'.format(app=config['app_name'], env=os.environ['ENV']),
-        taskRoleArn = config['task_role_arn'],
-        containerDefinitions=task_definition
-    )
-    config.append({'task_definition_arn': response['taskDefinition']['taskDefinitionArn']})
+    print("Uploading Task Definition...")
+    ecs = boto3.client('ecs')
+    response = ecs.register_task_definition(**task_definition)
+    task_definition_arn = response['taskDefinition']['taskDefinitionArn']
+    print("Task Definition ARN: {}".format(task_definition_arn))
 
-    parameters = {}  # what parameters will the template have?
+    priority = None
+    listener_rule = None
+    try:
+        cloudformation = boto3.client('cloudformation')
+        response = cloudformation.describe_stack_resources(
+            StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM']),
+            LogicalResourceId='ListenerRule'
+        )
+        listener_rule = response['StackResources'][0]['PhysicalResourceId']
+        print("Listener Rule already exists, not setting priority.")
+    except:
+        pass
+    if listener_rule == None:
+        print("Determining ALB Rule priority for new rule...")
+        rules = get_list_of_rules()
+        priority = get_priority(rules)
+    print("Rule priority is {}.".format(priority))
+
+    print("Generating Parmeters for CloudFormation template ({})".format(os.environ['ECS_APP_VERSION_TEMPLATE_PATH']))
+    container_port = [x['portMappings'][0]['containerPort'] for x in task_definition['containerDefinitions'] if x['name'] == os.environ['ECS_APP_NAME']][0]
+
+    parameters = [
+        {
+            "ParameterKey": "Name",
+            "ParameterValue": os.environ['ECS_APP_NAME']
+        },
+        {
+            "ParameterKey": 'ClusterName',
+            "ParameterValue": os.environ['ECS_CLUSTER_NAME']
+        },
+        {
+            "ParameterKey": 'Environment',
+            "ParameterValue": os.environ['ENV']
+        },
+        {
+            "ParameterKey": 'Version',
+            "ParameterValue": os.environ['BUILD_VERSION']
+        },
+        {
+            "ParameterKey": 'HealthCheckPath',
+            "ParameterValue": config['lb_health_check']
+        },
+        {
+            "ParameterKey": 'ContainerPort',
+            "ParameterValue": str(container_port)
+        },
+        {
+            "ParameterKey": 'TaskDefinitionArn',
+            "ParameterValue": task_definition_arn
+        }
+    ]
+
+    if priority != None:
+        parameters.append({
+            "ParameterKey": 'RulePriority',
+            "ParameterValue": str(priority)
+        })
+    else:
+        parameters.append({
+            "ParameterKey": 'RulePriority',
+            "UsePreviousValue": True
+        })
+    if config.get('autoscaling') != None:
+        parameters.append({
+            "ParameterKey": 'Autoscaling',
+            "ParameterValue": str(config['autoscaling'])
+        })
+    if config.get('autoscaling_target') != None:
+        parameters.append({
+            "ParameterKey": 'AutoscalingTargetValue',
+            "ParameterValue": str(config['autoscaling_target'])
+        })
+    if config.get('autoscaling_max_size') != None:
+        parameters.append({
+            "ParameterKey": 'AutoscalingMaxSize',
+            "ParameterValue": str(config['autoscaling_max_size'])
+        })
+    if config.get('autoscaling_min_size') != None:
+        parameters.append({
+            "ParameterKey": 'AutoscalingMinSize',
+            "ParameterValue": str(config['autoscaling_min_size'])
+        })
+
+    print("Finished generating Parameters:")
+    for param in parameters:
+        print("{:30}{}".format(param['ParameterKey'] + ':', param.get('ParameterValue', None)))
+
+    tags = [
+        {
+            'Key': 'Platform',
+            'Value': os.environ['ECS_APP_NAME']
+        },
+        {
+            'Key': 'Environment',
+            'Value': os.environ['ENV']
+        },
+        {
+            'Key': 'Realm',
+            'Value': os.environ['REALM']
+        },
+        {
+            'Key': 'Version',
+            'Value': os.environ['BUILD_VERSION']
+        }
+    ]
 
     stack_name = "MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
-    create_or_update_stack(stack_name, template, parameters)
+    print("Deploying CloudFormation stack: {}".format(stack_name))
+    start_time = datetime.datetime.now()
+    response = create_or_update_stack(stack_name, template, parameters, tags)
+    elapsed_time = datetime.datetime.now() - start_time
+    print("CloudFormation stack deploy completed in {}.".format(elapsed_time))
+
+    elbv2 = boto3.client('elbv2')
+    waiter = elbv2.get_waiter('target_in_service')
+    cloudformation = boto3.client('cloudformation')
+    response = cloudformation.describe_stack_resources(
+        StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM']),
+        LogicalResourceId='ALBTargetGroup'
+    )
+    target_group = response['StackResources'][0]['PhysicalResourceId']
+    print("Polling Target Group ({}) until a successful state is reached...".format(stack_name))
+    start_time = datetime.datetime.now()
+    try:
+        waiter.wait(TargetGroupArn=target_group)
+    except botocore.exceptions.WaiterError:
+        print('Health check did not pass!')
+        response = cloudformation.describe_stack_resources(
+            StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM']),
+            LogicalResourceId='ECSService'
+        )
+        service = response['StackResources'][0]['PhysicalResourceId']
+        print('Outputting events for service {}:'.format(service))
+        response = cloudformation.describe_stack_resources(
+            StackName="ECS-{}".format(os.environ['ECS_CLUSTER_NAME']),
+            LogicalResourceId='ECSCluster'
+        )
+        cluster = response['StackResources'][0]['PhysicalResourceId']
+        response = ecs.describe_services(
+            cluster=cluster,
+            services=[service]
+        )
+        for event in [x['message'] for x in response['services'][0]['events']]:
+            print(event)
+#        print('Deleting CloudFormation stack...')
+#        response = cloudformation.delete_stack(
+#            StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
+#        )
+#        waiter = cf.get_waiter('stack_delete_complete')
+#        waiter.wait(
+#            StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
+#        )
+#        print('CloudFormation stack deleted.')
+        raise
+    elapsed_time = datetime.datetime.now() - start_time
+    print('Health check passed in {}'.format(elapsed_time))
+    print("Done.")
+
+
 
 
 if __name__ == "__main__":
