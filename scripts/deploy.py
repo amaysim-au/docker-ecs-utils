@@ -337,7 +337,6 @@ def main():
 #            StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
 #        )
 #        print('CloudFormation stack deleted.')
-        raise
     elapsed_time = datetime.datetime.now() - start_time
     print('Health check passed in {}'.format(elapsed_time))
     print("Done.")
