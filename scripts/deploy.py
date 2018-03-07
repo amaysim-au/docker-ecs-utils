@@ -2,11 +2,8 @@
 
 import sys, os, yaml, json, datetime
 import boto3, botocore
-import subprocess
-from pprint import pprint
 import unittest
 from unittest.mock import patch
-from functools import reduce
 import re
 import time
 
@@ -136,13 +133,42 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
         environment = generate_environment_object()
         self.assertEqual(environment, expected_environment)
 
+    @patch('builtins.open', unittest.mock.mock_open(read_data='ENV=\sdfsa!!asdfasdf#asdfn\n\nREALM=""asdf\'asdfdfas{"asdf":"asdfa\'sd"}\n#asdfasdf\nECS_APP_NAME=dddddd # comment\nAWS_SECRET_ACCESS_KEY'))
+    @patch.dict('os.environ', {'ENV': 'asdfsa!!asdfasdf', 'REALM': '""asdf\'asdfdfas{"asdf":"asdfa\'sd"}', 'ECS_APP_NAME': 'dddddd', 'AWS_SECRET_ACCESS_KEY': "I should not be present #          "})
+    def test_3(self):
+        """Test with environment variable values set in file"""::
+        expected_environment = [
+            {
+                "name": "ENV",
+                "value": "asdfsa!!asdfasdf"
+            },
+            {
+                "name": "REALM",
+                "value": '""asdf\'asdfdfas{"asdf":"asdfa\'sd"}'
+            },
+            {
+                "name": "ECS_APP_NAME",
+                "value": "dddddd"
+            }
+        ]
+        environment = generate_environment_object()
+        self.assertEqual(environment, expected_environment)
+
 
 def generate_environment_object():
+    whitelisted_vars = [
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECURITY_TOKEN",
+        "AWS_PROFILE",
+        "AWS_DEFAULT_REGION"
+    ]
     environment = []
     env_file = open('.env', 'r').read()
     for env in env_file.split('\n'):
         env = env.split('=')[0]
-        if env not in ["AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECURITY_TOKEN"] and env != '' and not re.match(r'^\s?#', env):
+        if env not in whitelisted_vars and env != '' and not re.match(r'^\s?#', env):
             environment.append(
                 {
                     "name": env,
@@ -184,6 +210,8 @@ def main():
     environment = generate_environment_object()
     for index, value in enumerate(task_definition['containerDefinitions']):
         task_definition['containerDefinitions'][index]['environment'] = environment
+    print("Task definition generated:")
+    print(json.dumps(task_definition, indent=2, default=str))
 
     print("Generating Parmeters for CloudFormation template ({})".format(template_path))
     container_port = [x['portMappings'][0]['containerPort'] for x in task_definition['containerDefinitions'] if x['name'] == os.environ['ECS_APP_NAME']][0]
@@ -214,7 +242,6 @@ def main():
             "ParameterValue": str(container_port)
         }
     ]
-
 
     print("Uploading Task Definition...")
     ecs = boto3.client('ecs')

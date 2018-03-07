@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-import sys, os, yaml, json, datetime
+import sys, os
 import boto3, botocore
-import re
-import time
 
 
 def change_default_rule_tg():
