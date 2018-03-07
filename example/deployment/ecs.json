@@ -1,0 +1,25 @@
+{
+    "containerDefinitions": [
+        {
+            "essential": true,
+            "image": "nginx:latest",
+            "memoryReservation": 512,
+            "name": "Example",
+            "portMappings": [
+                {
+                    "containerPort": 80
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "ecs-${ECS_APP_NAME}-${ENV}",
+                    "awslogs-region": "ap-southeast-2",
+                    "awslogs-stream-prefix": "${BUILD_VERSION}"
+                }
+            }
+        }
+    ],
+    "family": "${ECS_APP_NAME}-${ENV}",
+    "volumes": []
+}

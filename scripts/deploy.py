@@ -1,275 +1,360 @@
 #!/usr/bin/env python3
 
 import sys, os, yaml, json, datetime
-# import boto3
+import boto3, botocore
 import subprocess
 from pprint import pprint
+import unittest
+from unittest.mock import patch
+from functools import reduce
+import re
+import time
 
-if len(sys.argv) != 4 and len(sys.argv) != 3:
-    exit('Usage: ./deploy.py <APP_NAME> <CLUSTER_NAME> [TASK_DEFINITION_IAM_ROLE]')
 
-vpc_id = None
-ecs_cluster = None
-ecs_service_role = None
-ecs_task_role = None
-alb_listener = None
-alb_listener_public = None
 
-# Default
-ecs_desired_tasks = 2
+class GetPriorityTest(unittest.TestCase):
+    def test_1(self):
+        """Simple test to get next priority"""
+        rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/2cc6c973c4d32f55","Priority":"1","Conditions":[{"Field":"host-header","Values":["host1.asdf.com"]},{"Field":"path-pattern","Values":["/path2"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/f9994e3e3a55d6dd","Priority":"2","Conditions":[{"Field":"path-pattern","Values":["/path1"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
+        priority = get_priority(rules)
+        self.assertEqual(priority, 3)
 
-name = sys.argv[1]
-cluster = sys.argv[2]
+    def test_2(self):
+        """Test with gap in list of priorities"""
+        rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/5cdf34d5cf48fabc","Priority":"1","Conditions":[{"Field":"path-pattern","Values":["/asdffdas"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/2cc6c973c4d32f55","Priority":"2","Conditions":[{"Field":"host-header","Values":["host1.asdf.com"]},{"Field":"path-pattern","Values":["/path2"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/284a6e35adc73d71","Priority":"5","Conditions":[{"Field":"path-pattern","Values":["/32452345"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
+        priority = get_priority(rules)
+        self.assertEqual(priority, 3)
 
-if len(sys.argv) == 4:
-    ecs_task_role = sys.argv[3]
+    def test_3(self):
+        """Test with no rules except default"""
+        rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
+        priority = get_priority(rules)
+        self.assertEqual(priority, 1)
 
-def get_platform(cluster):
-    global vpc_id, ecs_service_role, ecs_cluster, alb_listener, alb_listener_public
 
-    result_json = subprocess.check_output("aws cloudformation list-exports", shell=True)
-    result = json.loads(result_json)
+def get_priority(rules):
+    """Returns the next available priority when given the response from aws elbv2 describe-rules"""
+    priorities = [rule['Priority'] for rule in rules]
+    i = 1
+    rule_priority = None
+    while not rule_priority:  # increment from 1 onwards until we find a priority that is unused
+        if not str(i) in priorities:
+            return i
+        else:
+            i = i + 1
 
-    for export in result['Exports']:
-        if export['Name'] == "vpc":
-            vpc_id = export['Value']
-        elif export['Name'] == "ecs-"+cluster+"-ECSServiceRole":
-            ecs_service_role = export['Value']
-        elif export['Name'] == "ecs-"+cluster+"-ECSCluster":
-            ecs_cluster = export['Value']
-        elif export['Name'] == "ecs-"+cluster+"-ALBIntListenerSSL":
-            alb_listener = export['Value']
-        elif export['Name'] == "ecs-"+cluster+"-ALBPublicListenerSSL":
-            alb_listener_public = export['Value']
+cf = boto3.client('cloudformation')
 
-def read_ecs_config():
-    lb_host = None
-    lb_path = '/*'
-    lb_health_check = None
-    lb_deregistration_delay = "30"
-    scheme = 'internal' # internal | public
+def create_or_update_stack(stack_name, template, parameters, tags):
+    'Update or create stack'
 
-    if not os.path.isfile("deployment/ecs-config-env.yml"):
-        sys.exit('ERROR: File ecs-config-env.yml does not exist')
+    template_data = _parse_template(template)
 
-    with open("deployment/ecs-config-env.yml") as data_file:
-        data = yaml.load(data_file)
-
-    if 'lb_host' in data:
-        lb_host = data['lb_host']
-
-    if 'lb_path' in data:
-        lb_path = data['lb_path']
-
-    if 'lb_health_check' in data:
-        lb_health_check = data['lb_health_check']
-
-    if 'lb_deregistration_delay' in data:
-        lb_deregistration_delay = str(data['lb_deregistration_delay'])
-
-    if 'scheme' in data:
-        scheme = data['scheme']
-
-    if not lb_path or not lb_health_check:
-        sys.exit('ERROR: lb_path and lb_health_check labels must be defined at ecs-config.yml')
-
-    if scheme == 'public' and alb_listener_public == None:
-        sys.exit('ERROR: this cluster is not open to public. Use scheme: internal')
-
-    return {
-        'lb_host': lb_host,
-        'lb_path': lb_path,
-        'lb_health_check': lb_health_check,
-        'lb_deregistration_delay': lb_deregistration_delay,
-        'scheme': scheme
+    params = {
+        'StackName': stack_name,
+        'TemplateBody': template_data,
+        'Parameters': parameters,
+        'Tags': tags
     }
-
-def read_task_definition_port():
-    with open("deployment/ecs-env.json") as data_file:
-        data = json.load(data_file)
 
     try:
-        port = data['containerDefinitions'][0]['portMappings'][0]['containerPort']
-    except KeyError:
-        sys.exit("ERROR: ecs.json: First container definition must have a containerPort")
-
-    return str(port)
-
-def update_target_group_health_check(alb_target_group, lb_health_check, lb_healthy_threshold=2):
-
-    command = "aws elbv2 modify-target-group --target-group-arn '"+alb_target_group+"' --health-check-path '"+lb_health_check+"' --healthy-threshold-count "+str(lb_healthy_threshold)
-
-    print("--> RUN: %s" % command)
-    subprocess.check_output(command, shell=True)
-
-def update_listener_rule(alb_listener, alb_target_group, lb_path, lb_host):
-    rules_json = subprocess.check_output("aws elbv2 describe-rules --listener-arn '"+alb_listener+"'", shell=True)
-    rules = json.loads(rules_json)
-
-    rule_arn = None
-    rule_priority = str(len(rules["Rules"]))
-
-    for rule in rules["Rules"]:
-        if rule["Actions"][0]["TargetGroupArn"] == alb_target_group:
-            rule_arn = rule["RuleArn"]
-            break
-
-    conditions = []
-
-    lb_path_condition = {
-        "Field": "path-pattern",
-        "Values": [lb_path]
-    }
-    conditions.append(lb_path_condition)
-
-    if lb_host != None:
-        lb_host_condition = {
-            "Field": "host-header",
-            "Values": [lb_host]
-        }
-        conditions.append(lb_host_condition)
-
-    if rule_arn:
-        command = "aws elbv2 modify-rule --rule-arn "+rule_arn+" --conditions '"+json.dumps(conditions)+"'"
+        if _stack_exists(stack_name):
+            print('Updating {}'.format(stack_name))
+            stack_result = cf.update_stack(**params)
+            waiter = cf.get_waiter('stack_update_complete')
+        else:
+            print('Creating {}'.format(stack_name))
+            stack_result = cf.create_stack(**params)
+            waiter = cf.get_waiter('stack_create_complete')
+        print("...waiting for stack to be ready...")
+        waiter.wait(StackName=stack_name)
+    except botocore.exceptions.ClientError as ex:
+        error_message = ex.response['Error']['Message']
+        if error_message == 'No updates are to be performed.':
+            print("No changes")
+        else:
+            raise
     else:
-        command = "aws elbv2 create-rule --listener-arn "+alb_listener+" --priority "+rule_priority+" --conditions '"+json.dumps(conditions)+"' --actions Type=forward,TargetGroupArn="+alb_target_group+""
+        return cf.describe_stacks(StackName=stack_result['StackId'])
 
-    print("--> RUN: %s" % command)
-    subprocess.check_output(command, shell=True)
 
-def create_task_definition(name):
-    task_definition_name = cluster+"-"+name
-    if ecs_task_role:
-        command = "aws ecs register-task-definition --family "+task_definition_name+" --task-role-arn '"+ecs_task_role+"' --cli-input-json file://${PWD}/deployment/ecs-env.json"
-    else:
-        command = "aws ecs register-task-definition --family "+task_definition_name+" --cli-input-json file://${PWD}/deployment/ecs-env.json"
+def _parse_template(template):
+    cf.validate_template(TemplateBody=template)
+    return template
 
-    result_json = subprocess.check_output(command, shell=True)
-    result = json.loads(result_json)
-    return result['taskDefinition']['taskDefinitionArn']
 
-def create_alb_target_group(alb_listener, cluster, name):
-    target_group_name = cluster+"-"+name
-
-    result_json = subprocess.check_output("aws elbv2 create-target-group --name "+target_group_name+" --protocol HTTP --port 80 --vpc-id "+vpc_id+"", shell=True)
-    result = json.loads(result_json)
-
-    alb_target_group = result['TargetGroups'][0]['TargetGroupArn']
-
-    return alb_target_group
-
-def update_alb_target_group_params(alb_target_group, lb_deregistration_delay):
-    subprocess.check_output("aws elbv2 modify-target-group-attributes --target-group-arn "+alb_target_group+" --attributes Key=deregistration_delay.timeout_seconds,Value="+lb_deregistration_delay, shell=True)
-
-def get_alb_target_group(cluster, name):
-    target_group_name = cluster+"-"+name
-
-    result_process = subprocess.Popen("aws elbv2 describe-target-groups --names "+target_group_name, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    result_process.wait()
-    result_json,_ = result_process.communicate()
-    if result_process.returncode == 255:
-        return None
-
-    result = json.loads(result_json)
-    return result['TargetGroups'][0]['TargetGroupArn']
-
-def create_ecs_service(name, container_name, ecs_task_definition, alb_target_group, port, desired_tasks):
-    lb = "targetGroupArn="+alb_target_group+",containerName="+container_name+",containerPort="+port
-    command = "aws ecs create-service --cluster '"+ecs_cluster+"' --service-name '"+name+"' --load-balancers '"+lb+"' --task-definition '"+ecs_task_definition+"' --role '"+ecs_service_role+"' --desired-count "+str(desired_tasks)
-
-    print("--> RUN: %s" % command)
-    subprocess.check_output(command, shell=True)
-
-    return name
-
-def update_ecs_service(name, ecs_task_definition):
-    command = "aws ecs update-service --cluster '"+ecs_cluster+"' --service '"+name+"' --task-definition '"+ecs_task_definition+"'"
-
-    print("--> RUN: %s" % command)
-    subprocess.check_output(command, shell=True)
-
-def exists_ecs_service(name):
-    result_json = subprocess.check_output("aws ecs describe-services --cluster "+ecs_cluster+" --services "+name, shell=True)
-    result = json.loads(result_json)
-
-    for service in result['services']:
-        if service['status'] == 'ACTIVE':
+def _stack_exists(stack_name):
+    stacks = cf.list_stacks()['StackSummaries']
+    for stack in stacks:
+        if stack['StackStatus'] == 'DELETE_COMPLETE':
+            continue
+        if stack_name == stack['StackName']:
             return True
-
     return False
 
-def wait_ecs_service(name):
-    print("--> Waiting for service to come online...")
-    result_process = subprocess.Popen("aws ecs wait services-stable --cluster "+ecs_cluster+" --services "+name, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    result_process.wait()
 
-    if result_process.returncode == 255:
-        print("--> ERROR - Service NOT stable after 10 minutes")
+class GenerateEnvironmentObjectTest(unittest.TestCase):
+    @patch('builtins.open', unittest.mock.mock_open(read_data="ENV\nREALM\nECS_APP_NAME\nAWS_SECRET_ACCESS_KEY"))
+    @patch.dict('os.environ', {'ENV': 'Dev', 'REALM': 'NonProd', 'AWS_SECRET_ACCESS_KEY': "I should not be present"})
+    def test_1(self):
+        """Test with variables present in .env and in working environment"""
+        expected_environment = [
+            {
+                "name": "ENV",
+                "value": "Dev"
+            },
+            {
+                "name": "REALM",
+                "value": "NonProd"
+            },
+            {
+                "name": "ECS_APP_NAME",
+                "value": ""
+            }
+        ]
+        environment = generate_environment_object()
+        self.assertEqual(environment, expected_environment)
 
-        result_json = subprocess.check_output("aws ecs describe-services --cluster "+ecs_cluster+" --services "+name, shell=True)
-        result = json.loads(result_json)
+    @patch('builtins.open', unittest.mock.mock_open(read_data="ENV\n\n\nREALM\n#asdfasdf\nECS_APP_NAME\nAWS_SECRET_ACCESS_KEY"))
+    @patch.dict('os.environ', {'ENV': 'asdfsa!!asdfasdf#asdf', 'REALM': '""asdf\'asdfdfas{"asdf":"asdfa\'sd"}', 'AWS_SECRET_ACCESS_KEY': "I should not be present #          "})
+    def test_2(self):
+        """Test with weird formatting and characters in .env"""
+        expected_environment = [
+            {
+                "name": "ENV",
+                "value": "asdfsa!!asdfasdf#asdf"
+            },
+            {
+                "name": "REALM",
+                "value": '""asdf\'asdfdfas{"asdf":"asdfa\'sd"}'
+            },
+            {
+                "name": "ECS_APP_NAME",
+                "value": ""
+            }
+        ]
+        environment = generate_environment_object()
+        self.assertEqual(environment, expected_environment)
 
-        print("--> Last 10 events:")
-        for event in result['services'][0]['events'][0:9]:
-            created_at = datetime.datetime.utcfromtimestamp(event['createdAt']).strftime('%Y-%m-%dT%H:%M:%SZ')
-            print("--> "+created_at+" "+event['message'])
 
-        sys.exit(1)
+def generate_environment_object():
+    environment = []
+    env_file = open('.env', 'r').read()
+    for env in env_file.split('\n'):
+        env = env.split('=')[0]
+        if env not in ["AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECURITY_TOKEN"] and env != '' and not re.match(r'^\s?#', env):
+            environment.append(
+                {
+                    "name": env,
+                    "value": os.environ.get(env, "")
+                }
+            )
+    return environment
+
+def get_list_of_rules():
+    cloudformation = boto3.client('cloudformation')
+    response = cloudformation.describe_stack_resources(
+        StackName='ECS-{cluster_name}-App-{app_name}'.format(env=os.environ['ENV'], cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], realm=os.environ['REALM']),
+        LogicalResourceId='ALBListenerSSL'
+    )
+    alb_listener = response['StackResources'][0]['PhysicalResourceId']
+
+    client = boto3.client('elbv2')
+    response = client.describe_rules(ListenerArn = alb_listener)
+    return response['Rules']
+
 
 def main():
-    get_platform(cluster)
-    config = read_ecs_config()
+    print("Beginning deployment of {}...".format(os.environ['ECS_APP_NAME']))
 
-    ecs_task_definition = create_task_definition(name)
-    print("--> Created Task Definition: %s" % ecs_task_definition)
+    template_path = os.environ.get('ECS_APP_VERSION_TEMPLATE_PATH', '/scripts/ecs-cluster-application-version.yml')
+    stack_name = "MV-{realm}-{app_name}-{version}-{env}".format(
+        env=os.environ['ENV'],
+        app_name=os.environ['ECS_APP_NAME'],
+        version=os.environ['BUILD_VERSION'],
+        realm=os.environ['REALM']
+    )
 
-    # Internal ALB Target Group
-    alb_target_group = get_alb_target_group(cluster, name)
+    print("Loading configuration files...")
+    template = open(template_path, 'r').read()
+    config = yaml.safe_load(open('deployment/ecs-config.yml','r').read())
+    task_definition = json.loads(open('deployment/ecs-env.json','r').read())
 
-    if not alb_target_group:
-        print("--> Creating ALB TargetGroup")
-        alb_target_group = create_alb_target_group(alb_listener, cluster, name)
+    print("Generating environment variable configuration...")
+    environment = generate_environment_object()
+    for index, value in enumerate(task_definition['containerDefinitions']):
+        task_definition['containerDefinitions'][index]['environment'] = environment
+
+    print("Generating Parmeters for CloudFormation template ({})".format(template_path))
+    container_port = [x['portMappings'][0]['containerPort'] for x in task_definition['containerDefinitions'] if x['name'] == os.environ['ECS_APP_NAME']][0]
+
+    parameters = [
+        {
+            "ParameterKey": "Name",
+            "ParameterValue": os.environ['ECS_APP_NAME']
+        },
+        {
+            "ParameterKey": 'ClusterName',
+            "ParameterValue": os.environ['ECS_CLUSTER_NAME']
+        },
+        {
+            "ParameterKey": 'Environment',
+            "ParameterValue": os.environ['ENV']
+        },
+        {
+            "ParameterKey": 'Version',
+            "ParameterValue": os.environ['BUILD_VERSION']
+        },
+        {
+            "ParameterKey": 'HealthCheckPath',
+            "ParameterValue": config['lb_health_check']
+        },
+        {
+            "ParameterKey": 'ContainerPort',
+            "ParameterValue": str(container_port)
+        }
+    ]
+
+
+    print("Uploading Task Definition...")
+    ecs = boto3.client('ecs')
+    response = ecs.register_task_definition(**task_definition)
+    task_definition_arn = response['taskDefinition']['taskDefinitionArn']
+    print("Task Definition ARN: {}".format(task_definition_arn))
+
+    print("Determining ALB Rule priority...")
+    priority = None
+    listener_rule = None
+    try:
+        cloudformation = boto3.client('cloudformation')
+        response = cloudformation.describe_stack_resources(
+            StackName=stack_name,
+            LogicalResourceId='ListenerRule'
+        )
+        listener_rule = response['StackResources'][0]['PhysicalResourceId']
+        print("Listener Rule already exists, not setting priority.")
+    except:
+        pass
+    if listener_rule == None:
+        rules = get_list_of_rules()
+        priority = get_priority(rules)
+    print("Rule priority is {}.".format(priority))
+
+    print("Appending additional parameters...")
+    parameters.append(
+        {
+            "ParameterKey": 'TaskDefinitionArn',
+            "ParameterValue": task_definition_arn
+        }
+    )
+
+    if priority != None:
+        parameters.append({
+            "ParameterKey": 'RulePriority',
+            "ParameterValue": str(priority)
+        })
     else:
-        print("--> Got ALB TargetGroup: %s" % alb_target_group)
+        parameters.append({
+            "ParameterKey": 'RulePriority',
+            "UsePreviousValue": True
+        })
+    if config.get('autoscaling') != None:
+        parameters.append({
+            "ParameterKey": 'Autoscaling',
+            "ParameterValue": str(config['autoscaling'])
+        })
+    if config.get('autoscaling_target') != None:
+        parameters.append({
+            "ParameterKey": 'AutoscalingTargetValue',
+            "ParameterValue": str(config['autoscaling_target'])
+        })
+    if config.get('autoscaling_max_size') != None:
+        parameters.append({
+            "ParameterKey": 'AutoscalingMaxSize',
+            "ParameterValue": str(config['autoscaling_max_size'])
+        })
+    if config.get('autoscaling_min_size') != None:
+        parameters.append({
+            "ParameterKey": 'AutoscalingMinSize',
+            "ParameterValue": str(config['autoscaling_min_size'])
+        })
 
-    update_alb_target_group_params(alb_target_group, config['lb_deregistration_delay'])
-    update_listener_rule(alb_listener, alb_target_group, config['lb_path'], config['lb_host'])
-    update_target_group_health_check(alb_target_group, config['lb_health_check'])
+    print("Finished generating parameters:")
+    for param in parameters:
+        print("{:30}{}".format(param['ParameterKey'] + ':', param.get('ParameterValue', None)))
 
-    if not exists_ecs_service(name):
-        print("--> Creating ECS Service")
-        ecs_service = create_ecs_service(name, name, ecs_task_definition, alb_target_group, read_task_definition_port(), ecs_desired_tasks)
-    else:
-        print("--> Updating ECS Service")
-        update_ecs_service(name, ecs_task_definition)
+    tags = [
+        {
+            'Key': 'Platform',
+            'Value': os.environ['ECS_APP_NAME']
+        },
+        {
+            'Key': 'Environment',
+            'Value': os.environ['ENV']
+        },
+        {
+            'Key': 'Realm',
+            'Value': os.environ['REALM']
+        },
+        {
+            'Key': 'Version',
+            'Value': os.environ['BUILD_VERSION']
+        }
+    ]
 
-    wait_ecs_service(name)
+    print("Deploying CloudFormation stack: {}".format(stack_name))
+    start_time = datetime.datetime.now()
+    response = create_or_update_stack(stack_name, template, parameters, tags)
+    elapsed_time = datetime.datetime.now() - start_time
+    print("CloudFormation stack deploy completed in {}.".format(elapsed_time))
 
-    # Public ALB Target Group
-    if config['scheme'] == 'public':
-        name_public = 'public-'+name
+    print("Polling Target Group ({}) until a successful state is reached...".format(stack_name))
+    elbv2 = boto3.client('elbv2')
+    waiter = elbv2.get_waiter('target_in_service')
+    cloudformation = boto3.client('cloudformation')
+    response = cloudformation.describe_stack_resources(
+        StackName=stack_name,
+        LogicalResourceId='ALBTargetGroup'
+    )
+    target_group = response['StackResources'][0]['PhysicalResourceId']
+    start_time = datetime.datetime.now()
+    try:
+        waiter.wait(TargetGroupArn=target_group)
+    except botocore.exceptions.WaiterError:
+        print('Health check did not pass!')
+        response = cloudformation.describe_stack_resources(
+            StackName=stack_name,
+            LogicalResourceId='ECSService'
+        )
+        service = response['StackResources'][0]['PhysicalResourceId']
+        print('Outputting events for service {}:'.format(service))
+        response = cloudformation.describe_stack_resources(
+            StackName="ECS-{}".format(os.environ['ECS_CLUSTER_NAME']),
+            LogicalResourceId='ECSCluster'
+        )
+        cluster = response['StackResources'][0]['PhysicalResourceId']
+        response = ecs.describe_services(
+            cluster=cluster,
+            services=[service]
+        )
+        for event in [x['message'] for x in response['services'][0]['events']]:
+            print(event)
+#        print('Deleting CloudFormation stack...')
+#        response = cloudformation.delete_stack(
+#            StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
+#        )
+#        waiter = cf.get_waiter('stack_delete_complete')
+#        waiter.wait(
+#            StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
+#        )
+#        print('CloudFormation stack deleted.')
+    elapsed_time = datetime.datetime.now() - start_time
+    print('Health check passed in {}'.format(elapsed_time))
+    print("Done.")
 
-        alb_target_group_public = get_alb_target_group(cluster, name_public)
 
-        if not alb_target_group_public:
-            print("--> Creating ALB TargetGroup (Public)")
-            alb_target_group_public = create_alb_target_group(alb_listener, cluster, name_public)
-        else:
-            print("--> Got ALB TargetGroup (Public): %s" % alb_target_group_public)
-
-        update_alb_target_group_params(alb_target_group_public, config['lb_deregistration_delay'])
-        update_listener_rule(alb_listener_public, alb_target_group_public, config['lb_path'], config['lb_host'])
-        update_target_group_health_check(alb_target_group_public, config['lb_health_check'])
-
-        if not exists_ecs_service(name_public):
-            print("--> Creating ECS Service (Public)")
-            ecs_service_public = create_ecs_service(name_public, name, ecs_task_definition, alb_target_group_public, read_task_definition_port(), ecs_desired_tasks)
-        else:
-            print("--> Updating ECS Service (Public)")
-            update_ecs_service(name_public, ecs_task_definition)
-
-        wait_ecs_service(name_public)
 
 
 if __name__ == "__main__":
+#    unittest.main(verbosity=2)
     main()
