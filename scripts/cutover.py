@@ -17,7 +17,8 @@ def change_default_rule_tg():
         realm=os.environ['REALM']
     )
 
-    print('Beginning default listener rule cutover...')
+    print('Beginning cutover for {}'.format('https://' + os.environ['AWS_HOSTED_ZONE'] + os.environ['BASE_PATH']))
+    print('Changing default listener rule cutover...')
     cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stack_resources(
         StackName=alb_stack_name,
@@ -43,7 +44,7 @@ def change_default_rule_tg():
             }
         ]
     )
-    print('Done.')
+    print('{} has been updated.'.format('https://' + os.environ['AWS_HOSTED_ZONE'] + os.environ['BASE_PATH']))
 
 
 if __name__ == "__main__":

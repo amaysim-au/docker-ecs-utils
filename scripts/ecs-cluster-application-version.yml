@@ -60,9 +60,21 @@ Parameters:
     Description: Min number of containers to autoscale
     Type: Number
     Default: 2
+  Domain:
+    Description: Domain name, only used for output
+    Type: String
+  Path:
+    Description: Application path, only used for output
+    Type: String
+  AlbScheme:
+    Description: Is the ALB internal or internet-facing?
+    Type: String
 
 Conditions:
   isAutoscaling: !Equals [ !Ref Autoscaling, 'Enable']
+  isInternal: !Equals
+    - !Ref AlbScheme
+    - 'internal'
 
 Mappings:
   Common:
@@ -152,6 +164,7 @@ Resources:
 
   Route53ALB:
     Type: AWS::Route53::RecordSet
+    Condition: isInternal
     Properties:
       Name: !Sub
         - "${Name}-${Version}.${HostedZoneName}"
@@ -165,3 +178,11 @@ Resources:
           Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBCanonicalHostedZoneID"
         DNSName:
           Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBDNSName"
+
+Outputs:
+  Url:
+    Value: !Sub "https://${Name}-${Version}.${Domain}${Path}"
+    Description: URL for the version of this app
+  Version:
+    Value: !Ref Version
+    Description: The version used for this CloudFormation stack

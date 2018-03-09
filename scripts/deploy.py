@@ -136,7 +136,7 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
     @patch('builtins.open', unittest.mock.mock_open(read_data='ENV=\sdfsa!!asdfasdf#asdfn\n\nREALM=""asdf\'asdfdfas{"asdf":"asdfa\'sd"}\n#asdfasdf\nECS_APP_NAME=dddddd # comment\nAWS_SECRET_ACCESS_KEY'))
     @patch.dict('os.environ', {'ENV': 'asdfsa!!asdfasdf', 'REALM': '""asdf\'asdfdfas{"asdf":"asdfa\'sd"}', 'ECS_APP_NAME': 'dddddd', 'AWS_SECRET_ACCESS_KEY': "I should not be present #          "})
     def test_3(self):
-        """Test with environment variable values set in file"""::
+        """Test with environment variable values set in file"""
         expected_environment = [
             {
                 "name": "ENV",
@@ -194,12 +194,13 @@ def main():
     print("Beginning deployment of {}...".format(os.environ['ECS_APP_NAME']))
 
     template_path = os.environ.get('ECS_APP_VERSION_TEMPLATE_PATH', '/scripts/ecs-cluster-application-version.yml')
-    stack_name = "MV-{realm}-{app_name}-{version}-{env}".format(
+    stack_name = "MV-{realm}-{app}-{version}-{env}".format(
         env=os.environ['ENV'],
-        app_name=os.environ['ECS_APP_NAME'],
+        app=os.environ['ECS_APP_NAME'],
         version=os.environ['BUILD_VERSION'],
         realm=os.environ['REALM']
     )
+    app_stack_name = "ECS-{env}-App-{app}".format(env=os.environ['ENV'], app=os.environ['ECS_APP_NAME'])
 
     print("Loading configuration files...")
     template = open(template_path, 'r').read()
@@ -240,6 +241,14 @@ def main():
         {
             "ParameterKey": 'ContainerPort',
             "ParameterValue": str(container_port)
+        },
+        {
+            "ParameterKey": 'Domain',
+            "ParameterValue": os.environ['AWS_HOSTED_ZONE']
+        },
+        {
+            "ParameterKey": 'Path',
+            "ParameterValue": os.environ['BASE_PATH']
         }
     ]
 
@@ -267,11 +276,30 @@ def main():
         priority = get_priority(rules)
     print("Rule priority is {}.".format(priority))
 
+    print("Determining if ALB is internal or internet-facing...")
+    elbv2 = boto3.client('elbv2')
+    response = cloudformation.describe_stack_resources(
+        StackName=app_stack_name,
+        LogicalResourceId='ALB'
+    )
+    alb = response['StackResources'][0]['PhysicalResourceId']
+    response = elbv2.describe_load_balancers(
+        LoadBalancerArns=[alb],
+    )
+    alb_scheme = response['LoadBalancers'][0]['Scheme']
+    print("ALB is {}.".format(alb_scheme))
+
     print("Appending additional parameters...")
     parameters.append(
         {
             "ParameterKey": 'TaskDefinitionArn',
             "ParameterValue": task_definition_arn
+        }
+    )
+    parameters.append(
+        {
+            "ParameterKey": 'AlbScheme',
+            "ParameterValue": alb_scheme
         }
     )
 
@@ -334,6 +362,15 @@ def main():
     response = create_or_update_stack(stack_name, template, parameters, tags)
     elapsed_time = datetime.datetime.now() - start_time
     print("CloudFormation stack deploy completed in {}.".format(elapsed_time))
+
+    response = cloudformation.describe_stacks(
+        StackName=stack_name
+    )
+    outputs = response['Stacks'][0]['Outputs']
+    print("CloudFormation stack outputs:")
+    for param in parameters:
+    for output in outputs:
+        print("{:30}{}".format(output['OutputKey'] + ':', output.get('OutputValue', None)))
 
     print("Polling Target Group ({}) until a successful state is reached...".format(stack_name))
     elbv2 = boto3.client('elbv2')
