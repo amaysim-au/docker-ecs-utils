@@ -3,15 +3,32 @@ ifdef GO_PIPELINE_LABEL
 else
 	BUILD_VERSION?=local
 endif
-
-DOCKER_NAMESPACE=634961025262.dkr.ecr.ap-southeast-2.amazonaws.com
-DOCKER_IMAGE=nginx:latest
-
+ifdef AWS_ROLE
+	ASSUME_REQUIRED?=assumeRole
+endif
 ifdef DOTENV
 	DOTENV_TARGET=dotenv
 else
 	DOTENV_TARGET=.env
 endif
+
+# Just an example, not building the image here
+DOCKER_NAMESPACE=quay.io
+DOCKER_IMAGE=$(DOCKER_NAMESPACE)/assemblyline/ok:$(BUILD_VERSION)
+
+deploy: $(DOTENV_TARGET) $(ASSUME_REQUIRED)
+	docker-compose down
+	docker-compose run --rm ecs make -f /scripts/Makefile deploy
+	docker-compose down
+
+cutover: $(DOTENV_TARGET) $(ASSUME_REQUIRED)
+	docker-compose down
+	docker-compose run --rm ecs make -f /scripts/Makefile cutover
+	docker-compose down
+
+assumeRole: $(DOTENV_TARGET)
+	docker run --rm -e "AWS_ACCOUNT_ID" -e "AWS_ROLE" amaysim/aws:1.1.3 assume-role.sh >> $(DOTENV_TARGET)
+.PHONY: assumeRole
 
 .env:
 	@echo "Create .env with .env.template"
@@ -24,13 +41,3 @@ dotenv:
 	@echo "Overwrite .env with $(DOTENV)"
 	cp $(DOTENV) .env
 	echo "BUILD_VERSION=$(BUILD_VERSION)" >> .env
-
-deploy: $(DOTENV)
-	docker-compose down
-	docker-compose run --rm ecs make -f /scripts/Makefile deploy
-	docker-compose down
-
-cutover: $(DOTENV)
-	docker-compose down
-	docker-compose run --rm ecs make -f /scripts/Makefile cutover
-	docker-compose down

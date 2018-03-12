@@ -2,12 +2,12 @@
     "containerDefinitions": [
         {
             "essential": true,
-            "image": "nginx:latest",
+            "image": "quay.io/assemblyline/ok:latest",
             "memoryReservation": 512,
             "name": "Example",
             "portMappings": [
                 {
-                    "containerPort": 80
+                    "containerPort": 8888
                 }
             ],
             "logConfiguration": {
