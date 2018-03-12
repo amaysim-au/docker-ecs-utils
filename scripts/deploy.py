@@ -368,7 +368,6 @@ def main():
     )
     outputs = response['Stacks'][0]['Outputs']
     print("CloudFormation stack outputs:")
-    for param in parameters:
     for output in outputs:
         print("{:30}{}".format(output['OutputKey'] + ':', output.get('OutputValue', None)))
 
