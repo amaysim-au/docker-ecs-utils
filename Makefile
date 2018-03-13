@@ -1,6 +1,6 @@
-VERSION = 2.1.0
+VERSION = v2.1.2
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
-TAG = v$(VERSION)
+TAG = $(VERSION)
 
 dockerBuild:
 	docker build -t $(IMAGE_NAME) .

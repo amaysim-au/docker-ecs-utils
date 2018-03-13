@@ -26,6 +26,11 @@ cutover: $(DOTENV_TARGET) $(ASSUME_REQUIRED)
 	docker-compose run --rm ecs make -f /scripts/Makefile cutover
 	docker-compose down
 
+cleanup: $(DOTENV_TARGET) $(ASSUME_REQUIRED)
+	docker-compose down
+	docker-compose run --rm ecs make -f /scripts/Makefile cleanup
+	docker-compose down
+
 assumeRole: $(DOTENV_TARGET)
 	docker run --rm -e "AWS_ACCOUNT_ID" -e "AWS_ROLE" amaysim/aws:1.1.3 assume-role.sh >> $(DOTENV_TARGET)
 .PHONY: assumeRole

@@ -9,3 +9,7 @@ cutover:
 	envsubst < deployment/ecs.json > deployment/ecs-env.json
 	envsubst < deployment/ecs-config.yml > deployment/ecs-config-env.yml
 	/scripts/cutover.py
+
+cleanup:
+	export LANG=C.UTF-8
+	/scripts/cleanup.py
