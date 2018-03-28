@@ -87,6 +87,8 @@ Mappings:
       VPC: vpc
     Production:
       VPC: vpc-Prod
+    CoreProd:
+      VPC: MV-Core-VPC
 
 Resources:
   ALBTargetGroup:
