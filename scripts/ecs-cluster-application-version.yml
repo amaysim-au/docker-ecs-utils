@@ -22,6 +22,7 @@ Parameters:
       - QA
       - PreProd
       - Production
+      - CoreProd
   Version:
     Type: String
   HealthCheckPath:
