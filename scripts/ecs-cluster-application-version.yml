@@ -22,6 +22,7 @@ Parameters:
       - QA
       - PreProd
       - Production
+      - CoreProd
   Version:
     Type: String
   HealthCheckPath:
@@ -69,21 +70,23 @@ Parameters:
   AlbScheme:
     Description: Is the ALB internal or internet-facing?
     Type: String
-  ELBType:
-    Description: Type of ELB
+  LBType:
+    Description: Type of load balancer
     Type: String
     Default: ALB
     AllowedValues:
       - None
       - ALB
+      - NLB
 
 Conditions:
   isAutoscaling: !Equals [ !Ref Autoscaling, 'Enable']
   isInternal: !Equals
     - !Ref AlbScheme
     - 'internal'
-  isALB: !Equals [!Ref ELBType, ALB]
-  isNoELB: !Equals [!Ref ELBType, None]
+  isALB: !Equals [!Ref LBType, ALB]
+  isNLB: !Equals [!Ref LBType, NLB]
+  isNoLB: !Equals [!Ref LBType, None]
 
 Resources:
   ALBTargetGroup:

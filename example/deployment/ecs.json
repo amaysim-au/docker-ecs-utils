@@ -18,6 +18,17 @@
                     "awslogs-stream-prefix": "${BUILD_VERSION}"
                 }
             }
+        },
+        {
+            "image": "progrium/stress:latest",
+            "memoryReservation": 128,
+            "name": "Example-Stress",
+            "command": [
+              "--cpu", "2",
+              "--io", "1",
+              "--vm", "2",
+              "--vm-bytes", "128M"
+            ]
         }
     ],
     "family": "${ECS_APP_NAME}-${ENV}",
