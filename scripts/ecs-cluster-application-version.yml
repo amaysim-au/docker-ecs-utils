@@ -125,7 +125,8 @@ Resources:
 
   ECSService:
     Type: AWS::ECS::Service
-    DependsOn: ListenerRule
+    DependsOn: ListenerRule  # The ECS Service will fail to deploy if the TG is not attached to a LB. This DependsOn fixes this.
+    Condition: isALB
     Properties:
       TaskDefinition: !Ref TaskDefinitionArn
       DesiredCount: 1
@@ -135,11 +136,19 @@ Resources:
       Role:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSServiceRole"
       LoadBalancers: !If
-        - isALB
-        - - ContainerName: !Sub "${Name}"
-            ContainerPort: !Ref ContainerPort
-            TargetGroupArn: !Ref ALBTargetGroup
-        - !Ref "AWS::NoValue"
+        - ContainerName: !Sub "${Name}"
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref ALBTargetGroup
+  
+  # Because DependsOn can't be made conditional, we have to define ECSService twice - one for ALB and one without.
+  ECSService:
+    Type: AWS::ECS::Service
+    Condition: isNoLB
+    Properties:
+      TaskDefinition: !Ref TaskDefinitionArn
+      DesiredCount: 1
+      Cluster:
+        Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSClusterArn"
 
   ServiceScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
