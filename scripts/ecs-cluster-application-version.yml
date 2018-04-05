@@ -70,29 +70,28 @@ Parameters:
   AlbScheme:
     Description: Is the ALB internal or internet-facing?
     Type: String
+  LBType:
+    Description: Type of load balancer
+    Type: String
+    Default: ALB
+    AllowedValues:
+      - None
+      - ALB
+      - NLB
 
 Conditions:
   isAutoscaling: !Equals [ !Ref Autoscaling, 'Enable']
   isInternal: !Equals
     - !Ref AlbScheme
     - 'internal'
-
-Mappings:
-  Common:
-    Dev:
-      VPC: vpc
-    QA:
-      VPC: vpc
-    PreProd:
-      VPC: vpc
-    Production:
-      VPC: vpc-Prod
-    CoreProd:
-      VPC: MV-Core-VPC
+  isALB: !Equals [!Ref LBType, ALB]
+  isNLB: !Equals [!Ref LBType, NLB]
+  isNoLB: !Equals [!Ref LBType, None]
 
 Resources:
   ALBTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: isALB
     Properties:
       HealthCheckIntervalSeconds: 10
       HealthCheckPath: !Ref HealthCheckPath
@@ -106,10 +105,11 @@ Resources:
         - Key: deregistration_delay.timeout_seconds
           Value: !Ref DeregistrationDelay
       VpcId:
-        Fn::ImportValue: !FindInMap [Common, !Ref Environment, VPC]
+        Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-VpcId"
 
   ListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: isALB
     Properties:
       Actions:
         - Type: forward
@@ -129,14 +129,17 @@ Resources:
     Properties:
       TaskDefinition: !Ref TaskDefinitionArn
       DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 60
       Cluster:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSClusterArn"
       Role:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSServiceRole"
-      LoadBalancers:
-        - ContainerName: !Sub "${Name}"
-          ContainerPort: !Ref ContainerPort
-          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancers: !If
+        - isALB
+        - - ContainerName: !Sub "${Name}"
+            ContainerPort: !Ref ContainerPort
+            TargetGroupArn: !Ref ALBTargetGroup
+        - !Ref "AWS::NoValue"
 
   ServiceScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
