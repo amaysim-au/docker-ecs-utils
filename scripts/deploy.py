@@ -203,7 +203,7 @@ def get_load_balancer_type(app_stack_name):
         StackName=app_stack_name
     )
     try:
-        load_balancer_type = [parameter['ParameterValue'] for parameter in response['Stacks'][0]['Parameters'] if parameter['ParameterKey'] == "LBType"]
+        load_balancer_type = [parameter['ParameterValue'] for parameter in response['Stacks'][0]['Parameters'] if parameter['ParameterKey'] == "LBType"][0]
     except:
         print('Could not find LBType parameter in response: {}'.format(response))
     return load_balancer_type
@@ -222,6 +222,7 @@ def main():
     app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=os.environ['ECS_CLUSTER_NAME'], app=os.environ['ECS_APP_NAME'])
 
     load_balancer_type = get_load_balancer_type(app_stack_name)
+    print("Load balancer type is {}.".format(load_balancer_type))
 
     print("Loading configuration files...")
     template = open(template_path, 'r').read()
@@ -236,7 +237,7 @@ def main():
     print(json.dumps(task_definition, indent=2, default=str))
 
     print("Generating Parmeters for CloudFormation template ({})".format(template_path))
-    if load_balancer_type is not "None":  # this is intentionally a string
+    if load_balancer_type != "None":  # this is intentionally a string
         container_port = [x['portMappings'][0]['containerPort'] for x in task_definition['containerDefinitions'] if x['name'] == os.environ['ECS_APP_NAME']][0]
 
     parameters = [
@@ -255,10 +256,14 @@ def main():
         {
             "ParameterKey": 'Version',
             "ParameterValue": os.environ['BUILD_VERSION']
+        },
+        {
+            "ParameterKey": 'LBType',
+            "ParameterValue": load_balancer_type
         }
     ]
 
-    if load_balancer_type is not "None":  # this is intentionally a string
+    if load_balancer_type != "None":  # this is intentionally a string
         extra_parameters = [
             {
                 "ParameterKey": 'HealthCheckPath',
@@ -279,6 +284,36 @@ def main():
         ]
         for extra_parameter in extra_parameters:
             parameters.append(extra_parameter)
+    else:
+        extra_parameters = [
+            {
+                "ParameterKey": 'HealthCheckPath',
+                "ParameterValue": ""
+            },
+            {
+                "ParameterKey": 'ContainerPort',
+                "ParameterValue": ""
+            },
+            {
+                "ParameterKey": 'Domain',
+                "ParameterValue": ""
+            },
+            {
+                "ParameterKey": 'Path',
+                "ParameterValue": ""
+            },
+            {
+                "ParameterKey": 'RulePriority',
+                "ParameterValue": "-1"
+            },
+            {
+                "ParameterKey": 'AlbScheme',
+                "ParameterValue": ""
+            }
+        ]
+        for extra_parameter in extra_parameters:
+            parameters.append(extra_parameter)
+
 
     print("Uploading Task Definition...")
     ecs = boto3.client('ecs')
@@ -286,12 +321,12 @@ def main():
     task_definition_arn = response['taskDefinition']['taskDefinitionArn']
     print("Task Definition ARN: {}".format(task_definition_arn))
 
-    if load_balancer_type is not "None":
+    cloudformation = boto3.client('cloudformation')
+    if load_balancer_type != "None":
         print("Determining ALB Rule priority...")
         priority = None
         listener_rule = None
         try:
-            cloudformation = boto3.client('cloudformation')
             response = cloudformation.describe_stack_resources(
                 StackName=stack_name,
                 LogicalResourceId='ListenerRule'
@@ -325,7 +360,7 @@ def main():
             "ParameterValue": task_definition_arn
         }
     )
-    if load_balancer_type is not "None":
+    if load_balancer_type != "None":
         parameters.append(
             {
                 "ParameterKey": 'AlbScheme',
@@ -401,11 +436,10 @@ def main():
     for output in outputs:
         print("{:30}{}".format(output['OutputKey'] + ':', output.get('OutputValue', None)))
 
-    if load_balancer_type is not "None":
+    if load_balancer_type != "None":
         print("Polling Target Group ({}) until a successful state is reached...".format(stack_name))
         elbv2 = boto3.client('elbv2')
         waiter = elbv2.get_waiter('target_in_service')
-        cloudformation = boto3.client('cloudformation')
         response = cloudformation.describe_stack_resources(
             StackName=stack_name,
             LogicalResourceId='ALBTargetGroup'

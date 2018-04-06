@@ -73,7 +73,6 @@ Parameters:
   LBType:
     Description: Type of load balancer
     Type: String
-    Default: ALB
     AllowedValues:
       - None
       - ALB
@@ -87,6 +86,7 @@ Conditions:
   isALB: !Equals [!Ref LBType, ALB]
   isNLB: !Equals [!Ref LBType, NLB]
   isNoLB: !Equals [!Ref LBType, None]
+  isLB: !Not ["Condition": isNoLB]
 
 Resources:
   ALBTargetGroup:
@@ -123,9 +123,10 @@ Resources:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBListenerSSL"
       Priority: !Ref RulePriority
 
-  ECSService:
+  ECSServiceLB:
     Type: AWS::ECS::Service
-    DependsOn: ListenerRule
+    DependsOn: ListenerRule  # The ECS Service will fail to deploy if the TG is not attached to a LB. This DependsOn fixes this.
+    Condition: isLB
     Properties:
       TaskDefinition: !Ref TaskDefinitionArn
       DesiredCount: 1
@@ -134,12 +135,20 @@ Resources:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSClusterArn"
       Role:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSServiceRole"
-      LoadBalancers: !If
-        - isALB
-        - - ContainerName: !Sub "${Name}"
-            ContainerPort: !Ref ContainerPort
-            TargetGroupArn: !Ref ALBTargetGroup
-        - !Ref "AWS::NoValue"
+      LoadBalancers:
+        - ContainerName: !Sub "${Name}"
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref ALBTargetGroup
+  
+  # Because DependsOn can't be made conditional, we have to define ECSService twice - one for ALB and one without.
+  ECSServiceNoLB:
+    Type: AWS::ECS::Service
+    Condition: isNoLB
+    Properties:
+      TaskDefinition: !Ref TaskDefinitionArn
+      DesiredCount: 1
+      Cluster:
+        Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSClusterArn"
 
   ServiceScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
@@ -151,7 +160,10 @@ Resources:
         - "service/${ECSCluster}/${ServiceName}"
         - ECSCluster:
             "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSCluster"
-          ServiceName: !GetAtt ECSService.Name
+          ServiceName: !If
+            - isNoLB
+            - !GetAtt ECSServiceNoLB.Name
+            - !GetAtt ECSServiceLB.Name
       RoleARN:
         "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSAutoscalingRoleArn"
       ScalableDimension: ecs:service:DesiredCount
