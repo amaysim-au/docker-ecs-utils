@@ -29,6 +29,10 @@ Parameters:
     Description: Healthcheck Path used on TargetGroup
     Type: String
     Default: /
+  HealthCheckGracePeriod:
+    Description: The period of time, in seconds, that the Amazon ECS service scheduler ignores unhealthy Elastic Load Balancing target health checks after a task has first started.
+    Type: Number
+    Default: 60
   TaskDefinitionArn:
     Description: ARN of Task Definition revision to Deploy to this service
     Type: String
@@ -130,7 +134,7 @@ Resources:
     Properties:
       TaskDefinition: !Ref TaskDefinitionArn
       DesiredCount: 1
-      HealthCheckGracePeriodSeconds: 60
+      HealthCheckGracePeriodSeconds: !Ref HealthCheckGracePeriod
       Cluster:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSClusterArn"
       Role:
@@ -139,7 +143,7 @@ Resources:
         - ContainerName: !Sub "${Name}"
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref ALBTargetGroup
-  
+
   # Because DependsOn can't be made conditional, we have to define ECSService twice - one for ALB and one without.
   ECSServiceNoLB:
     Type: AWS::ECS::Service

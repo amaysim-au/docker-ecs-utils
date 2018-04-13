@@ -1,4 +1,4 @@
-VERSION = 2.2.0
+VERSION = 2.3.0
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
 TAG = $(VERSION)
 
