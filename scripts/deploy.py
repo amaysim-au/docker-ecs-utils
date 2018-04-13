@@ -270,6 +270,10 @@ def main():
                 "ParameterValue": config['lb_health_check']
             },
             {
+                "ParameterKey": 'HealthCheckGracePeriod',
+                "ParameterValue": str(config['lb_health_check_grace_period'])
+            },
+            {
                 "ParameterKey": 'ContainerPort',
                 "ParameterValue": str(container_port)
             },
