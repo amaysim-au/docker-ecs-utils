@@ -7,11 +7,10 @@ from deploy import get_list_of_rules
 def cleanup_version_stack():
     cloudformation = boto3.client('cloudformation')
 
-    version_stack_name = "MV-{realm}-{app_name}-{version}-{env}".format(
-        env=os.environ['ENV'],
+    version_stack_name = "ECS-{cluster_name}-App-{app_name}-{version}".format(
+        cluster_name=os.environ['ECS_CLUSTER_NAME'],
         app_name=os.environ['ECS_APP_NAME'],
-        version=os.environ['BUILD_VERSION'],
-        realm=os.environ['REALM']
+        version=os.environ['BUILD_VERSION']
     )
     alb_stack_name = 'ECS-{cluster_name}-App-{app_name}'.format(
         env=os.environ['ENV'],
