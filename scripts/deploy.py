@@ -213,11 +213,10 @@ def main():
     print("Beginning deployment of {}...".format(os.environ['ECS_APP_NAME']))
 
     template_path = os.environ.get('ECS_APP_VERSION_TEMPLATE_PATH', '/scripts/ecs-cluster-application-version.yml')
-    stack_name = "MV-{realm}-{app}-{version}-{env}".format(
-        env=os.environ['ENV'],
-        app=os.environ['ECS_APP_NAME'],
-        version=os.environ['BUILD_VERSION'],
-        realm=os.environ['REALM']
+    version_stack_name = "ECS-{cluster_name}-App-{app_name}-{version}".format(
+        cluster_name=os.environ['ECS_CLUSTER_NAME'],
+        app_name=os.environ['ECS_APP_NAME'],
+        version=os.environ['BUILD_VERSION']
     )
     app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=os.environ['ECS_CLUSTER_NAME'], app=os.environ['ECS_APP_NAME'])
 
@@ -332,7 +331,7 @@ def main():
         listener_rule = None
         try:
             response = cloudformation.describe_stack_resources(
-                StackName=stack_name,
+                StackName=version_stack_name,
                 LogicalResourceId='ListenerRule'
             )
             listener_rule = response['StackResources'][0]['PhysicalResourceId']
@@ -426,14 +425,14 @@ def main():
         }
     ]
 
-    print("Deploying CloudFormation stack: {}".format(stack_name))
+    print("Deploying CloudFormation stack: {}".format(version_stack_name))
     start_time = datetime.datetime.now()
-    response = create_or_update_stack(stack_name, template, parameters, tags)
+    response = create_or_update_stack(version_stack_name, template, parameters, tags)
     elapsed_time = datetime.datetime.now() - start_time
     print("CloudFormation stack deploy completed in {}.".format(elapsed_time))
 
     response = cloudformation.describe_stacks(
-        StackName=stack_name
+        StackName=version_stack_name
     )
     outputs = response['Stacks'][0]['Outputs']
     print("CloudFormation stack outputs:")
@@ -441,11 +440,11 @@ def main():
         print("{:30}{}".format(output['OutputKey'] + ':', output.get('OutputValue', None)))
 
     if load_balancer_type != "None":
-        print("Polling Target Group ({}) until a successful state is reached...".format(stack_name))
+        print("Polling Target Group ({}) until a successful state is reached...".format(version_stack_name))
         elbv2 = boto3.client('elbv2')
         waiter = elbv2.get_waiter('target_in_service')
         response = cloudformation.describe_stack_resources(
-            StackName=stack_name,
+            StackName=version_stack_name,
             LogicalResourceId='ALBTargetGroup'
         )
         target_group = response['StackResources'][0]['PhysicalResourceId']
@@ -455,7 +454,7 @@ def main():
         except botocore.exceptions.WaiterError:
             print('Health check did not pass!')
             response = cloudformation.describe_stack_resources(
-                StackName=stack_name,
+                StackName=version_stack_name,
                 LogicalResourceId='ECSService'
             )
             service = response['StackResources'][0]['PhysicalResourceId']
