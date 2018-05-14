@@ -87,6 +87,7 @@ Conditions:
   isInternal: !Equals
     - !Ref AlbScheme
     - 'internal'
+  isExternal: !Not [!Condition isInternal]
   isALB: !Equals [!Ref LBType, ALB]
   isNLB: !Equals [!Ref LBType, NLB]
   isNoLB: !Equals [!Ref LBType, None]
@@ -100,11 +101,11 @@ Resources:
       HealthCheckIntervalSeconds: 10
       HealthCheckPath: !Ref HealthCheckPath
       HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
+      HealthCheckTimeoutSeconds: 9
       HealthyThresholdCount: 2
       Port: 80
       Protocol: HTTP
-      UnhealthyThresholdCount: 2
+      UnhealthyThresholdCount: 10
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
           Value: !Ref DeregistrationDelay
@@ -134,6 +135,11 @@ Resources:
     Properties:
       TaskDefinition: !Ref TaskDefinitionArn
       DesiredCount: 1
+      PlacementStrategies:
+        - Type: spread
+          Field:  attribute:ecs.availability-zone
+        - Type: binpack
+          Field: memory
       HealthCheckGracePeriodSeconds: !Ref HealthCheckGracePeriod
       Cluster:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSClusterArn"
@@ -181,8 +187,47 @@ Resources:
       ScalingTargetId: !Ref 'ServiceScalingTarget'
       TargetTrackingScalingPolicyConfiguration:
         TargetValue: !Ref AutoscalingTargetValue
+        ScaleInCooldown: 180
+        ScaleOutCooldown: 60
+        CustomizedMetricSpecification:
+          MetricName: TargetResponseTime
+          Namespace: AWS/ApplicationELB
+          Statistic: Average
+          Dimensions:
+            - Name: TargetGroup
+              Value: !GetAtt ALBTargetGroup.TargetGroupFullName
+            - Name: LoadBalancer
+              Value:
+                Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBFullName"
+
+  ServiceScalingPolicyCPU:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: isAutoscaling
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-scale-target-cpu'
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 90
+        ScaleInCooldown: 180
+        ScaleOutCooldown: 60
         PredefinedMetricSpecification:
           PredefinedMetricType: ECSServiceAverageCPUUtilization
+
+  ServiceScalingPolicyMem:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: isAutoscaling
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-scale-target-mem'
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 95
+        ScaleInCooldown: 180
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+
 
   Route53ALB:
     Type: AWS::Route53::RecordSet
@@ -203,7 +248,12 @@ Resources:
 
 Outputs:
   Url:
-    Value: !Sub "https://${Name}-${Version}.${Domain}${Path}"
+    Value: !Ref Route53ALB
+    Condition: isInternal
+    Description: URL for the version of this app
+  Url:
+    Value: !Sub "https://${Version}.${Name}.${Domain}${Path}"
+    Condition: isExternal
     Description: URL for the version of this app
   Version:
     Value: !Ref Version
