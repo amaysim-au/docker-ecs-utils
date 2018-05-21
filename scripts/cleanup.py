@@ -4,10 +4,7 @@ import boto3, botocore
 from pprint import pprint
 from deploy import get_list_of_rules
 
-def cleanup_version_stack(
-        cluster_name=os.environ['ECS_CLUSTER_NAME'],
-        app_name=os.environ['ECS_APP_NAME'],
-        version=os.environ['BUILD_VERSION']):
+def cleanup_version_stack(cluster_name, app_name, version):
 
     cloudformation = boto3.client('cloudformation')
 
@@ -43,7 +40,7 @@ def cleanup_version_stack(
     if target_group == alb_default_target_group:
         # Cannot cleanup, target group is in use
         print("Error: Cannot cleanup, version {version} is live".format(version=version))
-        sys.exit(1)
+        return False
 
     response = cloudformation.delete_stack(
         StackName=version_stack_name
@@ -73,6 +70,12 @@ def cleanup_version_stack(
             )
 
     print('Stack deletion complete')
+    return True
 
 if __name__ == "__main__":
-    cleanup_version_stack()
+    if not cleanup_version_stack(
+        cluster_name=os.environ['ECS_CLUSTER_NAME'],
+        app_name=os.environ['ECS_APP_NAME'],
+        version=os.environ['BUILD_VERSION']):
+
+        sys.exit(1)
