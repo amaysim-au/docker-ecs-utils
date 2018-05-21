@@ -13,3 +13,7 @@ cutover:
 cleanup:
 	export LANG=C.UTF-8
 	/scripts/cleanup.py
+
+autocleanup:
+	export LANG=C.UTF-8
+	/scripts/autocleanup.py

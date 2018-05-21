@@ -187,7 +187,9 @@ def generate_environment_object():
 def get_list_of_rules():
     cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stack_resources(
-        StackName='ECS-{cluster_name}-App-{app_name}'.format(env=os.environ['ENV'], cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], realm=os.environ['REALM']),
+        StackName='ECS-{cluster_name}-App-{app_name}'.format(
+            cluster_name=os.environ['ECS_CLUSTER_NAME'],
+            app_name=os.environ['ECS_APP_NAME']),
         LogicalResourceId='ALBListenerSSL'
     )
     alb_listener = response['StackResources'][0]['PhysicalResourceId']
