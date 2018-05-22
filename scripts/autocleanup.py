@@ -102,4 +102,4 @@ if __name__ == "__main__":
         if 'DRY_RUN' in os.environ and os.environ['DRY_RUN'] == 'true':
             print("DRY_RUN=true")
         else:
-            cleanup_version_stack(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], version=version):
+            cleanup_version_stack(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], version=version)
