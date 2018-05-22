@@ -1,4 +1,3 @@
 example/deployment/ecs-env.json
 example/deployment/ecs-config-env.yml
-example/.env*
-example/!.env.template
+example/.env

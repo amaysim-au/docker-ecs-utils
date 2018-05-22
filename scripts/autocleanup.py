@@ -55,7 +55,7 @@ def filter_old_stacks(stacks, age_seconds):
     filtered_stacks = []
 
     for stack in stacks:
-        if stack['CreationTime'].timestamp() < datetime.datetime.now().timestamp() - age_seconds:
+        if stack['CreationTime'].timestamp() < datetime.datetime.now().timestamp() - int(age_seconds):
             filtered_stacks.append(stack)
 
     return filtered_stacks
@@ -90,8 +90,8 @@ if __name__ == "__main__":
     stacks = filter_not_cutover(stacks=stacks, cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'])
 
     # Filter stacks older than N number of seconds
-    if 'CLEANUP_OLDER_THAN' in os.environ:
-        stacks = filter_old_stacks(stacks, os.environ['CLEANUP_OLDER_THAN'])
+    if 'ECS_AUTOCLEANUP_OLDER_THAN' in os.environ:
+        stacks = filter_old_stacks(stacks, os.environ['ECS_AUTOCLEANUP_OLDER_THAN'])
 
     for stack in stacks:
         version = get_stack_version(stack['StackName'])
@@ -99,7 +99,7 @@ if __name__ == "__main__":
             cluster_name=os.environ['ECS_CLUSTER_NAME'],
             app_name=os.environ['ECS_APP_NAME'],
             version=version))
-        if 'DRY_RUN' in os.environ and os.environ['DRY_RUN'] == 'true':
-            print("DRY_RUN=true")
+        if 'ECS_AUTOCLEANUP_DRY_RUN' in os.environ and os.environ['ECS_AUTOCLEANUP_DRY_RUN'] == 'true':
+            print("ECS_AUTOCLEANUP_DRY_RUN=true")
         else:
             cleanup_version_stack(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], version=version)
