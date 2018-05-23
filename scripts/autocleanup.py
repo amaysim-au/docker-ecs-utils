@@ -77,11 +77,32 @@ def filter_not_cutover(stacks, cluster_name, app_name):
 
     return filtered_stacks
 
+def filter_excludes(stacks, stack_excludes):
+    filtered_stacks = []
+
+    stack_excludes_list = [item.strip() for item in stack_excludes.split(',')]
+
+    for stack in stacks:
+        exclude = False
+
+        for stack_excludes in stack_excludes_list:
+            if stack['StackName'].startswith(stack_excludes):
+                exclude = True
+
+        if not exclude:
+            filtered_stacks.append(stack)
+
+    return filtered_stacks
+
 def get_stack_version(stack_name):
     response = cloudformation.describe_stacks(StackName=stack_name)
     for output in response['Stacks'][0]['Outputs']:
         if output['OutputKey'] == 'Version':
             return output['OutputValue']
+
+def get_stack_termination_protection(stack_name):
+    response = cloudformation.describe_stacks(StackName=stack_name)
+    return response['Stacks'][0]['EnableTerminationProtection']
 
 if __name__ == "__main__":
     stacks = list_stacks(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'])
@@ -89,17 +110,30 @@ if __name__ == "__main__":
     # Filter live stacks from the rest
     stacks = filter_not_cutover(stacks=stacks, cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'])
 
+    # Filter stacks excluded from cleanup
+    if 'ECS_AUTOCLEANUP_EXCLUDES' in os.environ:
+        stacks = filter_excludes(stacks, os.environ['ECS_AUTOCLEANUP_EXCLUDES'])
+
     # Filter stacks older than N number of seconds
     if 'ECS_AUTOCLEANUP_OLDER_THAN' in os.environ:
         stacks = filter_old_stacks(stacks, os.environ['ECS_AUTOCLEANUP_OLDER_THAN'])
 
     for stack in stacks:
         version = get_stack_version(stack['StackName'])
-        print("Cleaning up {cluster_name}-{app_name}-{version}".format(
+
+        stack_name = "{cluster_name}-{app_name}-{version}".format(
             cluster_name=os.environ['ECS_CLUSTER_NAME'],
             app_name=os.environ['ECS_APP_NAME'],
-            version=version))
+            version=version)
+
+        if get_stack_termination_protection(stack['StackName']):
+            print("Skipping {stack_name}, Termination Protection Enabled".format(stack_name=stack_name))
+            continue
+
         if 'ECS_AUTOCLEANUP_DRY_RUN' in os.environ and os.environ['ECS_AUTOCLEANUP_DRY_RUN'] == 'true':
-            print("ECS_AUTOCLEANUP_DRY_RUN=true")
-        else:
-            cleanup_version_stack(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], version=version)
+            print("Skipping {stack_name}, Dry-run Enabled".format(stack_name=stack_name))
+            continue
+
+        print("Cleaning up {stack_name}".format(stack_name=stack_name))
+
+        cleanup_version_stack(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], version=version)
