@@ -1,4 +1,4 @@
-VERSION = 2.5.5-alb-scaling
+VERSION = 2.6.0-alb-scaling
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
 TAG = $(VERSION)
 

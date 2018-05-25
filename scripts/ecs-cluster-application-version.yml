@@ -200,6 +200,44 @@ Resources:
               Value:
                 Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBFullName"
 
+  # Target tracking does not ever scale down on missing data, so we have to create our own trigger to scale down
+  ServiceScalingInsufficientData:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: isAutoscaling
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-scale-target-insufficient'
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 180
+        StepAdjustments:
+          - ScalingAdjustment: -2
+            MetricIntervalLowerBound: 0  # scale down no matter what
+          - ScalingAdjustment: -2
+            MetricIntervalUpperBound: 0
+
+  AlarmResponseTimeInsufficientData:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: No requests
+      MetricName: TargetResponseTime
+      Namespace: AWS/ApplicationELB
+      Statistic: Average
+      Period: '60'
+      EvaluationPeriods: '5'
+      Threshold: '9999999999999999'  # we only want this to breach with INSUFFICIENT_DATA, so we make the threshold unrealistically high
+      TreatMissingData: breaching  # this is the important part, it forces the alarm to trigger if data is missing
+      AlarmActions:
+        - Ref: ServiceScalingInsufficientData
+      Dimensions:
+        - Name: TargetGroup
+          Value: !GetAtt ALBTargetGroup.TargetGroupFullName
+        - Name: LoadBalancer
+          Value:
+            Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBFullName"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+
   ServiceScalingPolicyCPU:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
     Condition: isAutoscaling
@@ -227,7 +265,6 @@ Resources:
         ScaleOutCooldown: 60
         PredefinedMetricSpecification:
           PredefinedMetricType: ECSServiceAverageMemoryUtilization
-
 
   Route53ALB:
     Type: AWS::Route53::RecordSet
