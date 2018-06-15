@@ -172,7 +172,11 @@ def generate_environment_object():
         "AWS_DEFAULT_REGION"
     ]
     environment = []
-    env_file = open('.env', 'r').read()
+    if 'ENV_FILE' in os.environ:
+        env_file = open(os.environ['ENV_FILE'], 'r').read()
+    else:
+        env_file = open('.env', 'r').read()
+
     for env in env_file.split('\n'):
         env = env.split('=')[0]
         if env not in whitelisted_vars and env != '' and not re.match(r'^\s?#', env):
