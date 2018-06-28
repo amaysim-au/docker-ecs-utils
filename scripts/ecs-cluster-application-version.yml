@@ -68,9 +68,11 @@ Parameters:
   Domain:
     Description: Domain name, only used for output
     Type: String
+    Default: undefined
   Path:
     Description: Application path, only used for output
     Type: String
+    Default: undefined
   AlbScheme:
     Description: Is the ALB internal or internet-facing?
     Type: String
@@ -203,6 +205,7 @@ Resources:
 
 Outputs:
   Url:
+    Condition: isALB
     Value: !Sub "https://${Name}-${Version}.${Domain}${Path}"
     Description: URL for the version of this app
   Version:
