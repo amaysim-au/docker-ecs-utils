@@ -44,10 +44,26 @@ def list_stacks(cluster_name, app_name):
     for page in response_iterator:
         stacks = page['StackSummaries']
         for stack in stacks:
-            if stack['StackName'].startswith(stack_name_prefix) and \
-                "".join(stack['TemplateDescription']) == stack_description:
+            if not stack['StackName'].startswith(stack_name_prefix):
+                continue
+            if "".join(stack['TemplateDescription']) != stack_description:
+                continue
 
-                stack_list.append(stack)
+            # Check if application name is correct:
+            response = cloudformation.describe_stacks(
+                StackName=stack['StackName']
+            )
+            stack_details = response['Stacks'][0]
+            stack_param_name = "undefined"
+
+            for stack_param in stack_details['Parameters']:
+                if stack_param['ParameterKey'] == 'Name':
+                    stack_param_name = stack_param['ParameterValue']
+
+            if stack_param_name != app_name:
+                continue
+
+            stack_list.append(stack)
 
     return stack_list
 
