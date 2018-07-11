@@ -1,3 +1,6 @@
 example/deployment/ecs-env.json
 example/deployment/ecs-config-env.yml
 example/.env
+scripts/__pycache__/
+.env*
+!.env.template

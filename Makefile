@@ -1,4 +1,4 @@
-VERSION = 2.6.0
+VERSION = 2.6.1
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
 TAG = $(VERSION)
 
@@ -14,6 +14,10 @@ dockerPush: ecrLogin
 shell:
 	docker-compose down
 	docker-compose run --rm shell
+
+test:
+	docker-compose down
+	docker-compose run --rm ecs scripts/test.py
 
 gitTag:
 	-git tag -d $(TAG)
