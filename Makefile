@@ -15,6 +15,10 @@ shell:
 	docker-compose down
 	docker-compose run --rm shell
 
+test:
+	docker-compose down
+	docker-compose run --rm ecs scripts/test.py
+
 gitTag:
 	-git tag -d $(TAG)
 	-git push origin :refs/tags/$(TAG)

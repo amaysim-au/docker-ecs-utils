@@ -1,0 +1,9 @@
+version: '2.1'
+services:
+  ecs:
+    image: amaysim/ecs-utils:local
+    build: .
+    env_file: .env
+    volumes:
+      - .:/srv/app:Z
+
