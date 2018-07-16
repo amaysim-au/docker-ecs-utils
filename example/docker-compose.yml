@@ -1,7 +1,7 @@
 version: '2.1'
 services:
   ecs:
-    image: amaysim/ecs-utils:2.5.9
+    image: amaysim/ecs-utils:2.6.1
     env_file: .env
     volumes:
       - .:/srv/app:Z

@@ -1,5 +1,6 @@
 ifdef GO_PIPELINE_LABEL
 	BUILD_VERSION?=$(GO_PIPELINE_LABEL)
+	ENV_RM_REQUIRED?=rm_env
 else
 	BUILD_VERSION?=local
 endif
@@ -12,26 +13,29 @@ else
 	DOTENV_TARGET=.env
 endif
 
-# Just an example, not building the image here
-DOCKER_NAMESPACE=quay.io
-DOCKER_IMAGE=$(DOCKER_NAMESPACE)/assemblyline/ok:$(BUILD_VERSION)
+DOCKER_NAMESPACE=$(ECR_AWS_ACCOUNT_ID).dkr.ecr.ap-southeast-2.amazonaws.com/devops
+DOCKER_IMAGE=$(DOCKER_NAMESPACE)/ok
 
-deploy: $(DOTENV_TARGET) $(ASSUME_REQUIRED)
+##################
+# PUBLIC TARGETS #
+##################
+
+deploy: $(ENV_RM_REQUIRED) $(DOTENV_TARGET) $(ASSUME_REQUIRED)
 	docker-compose down
 	docker-compose run --rm ecs make -f /scripts/Makefile deploy
 	docker-compose down
 
-cutover: $(DOTENV_TARGET) $(ASSUME_REQUIRED)
+cutover: $(ENV_RM_REQUIRED) $(DOTENV_TARGET) $(ASSUME_REQUIRED)
 	docker-compose down
 	docker-compose run --rm ecs make -f /scripts/Makefile cutover
 	docker-compose down
 
-cleanup: $(DOTENV_TARGET) $(ASSUME_REQUIRED)
+cleanup: $(ENV_RM_REQUIRED) $(DOTENV_TARGET) $(ASSUME_REQUIRED)
 	docker-compose down
 	docker-compose run --rm ecs make -f /scripts/Makefile cleanup
 	docker-compose down
 
-autocleanup: $(DOTENV_TARGET) $(ASSUME_REQUIRED)
+autocleanup: $(ENV_RM_REQUIRED) $(DOTENV_TARGET) $(ASSUME_REQUIRED)
 	docker-compose down
 	docker-compose run --rm ecs make -f /scripts/Makefile autocleanup
 	docker-compose down
@@ -40,14 +44,40 @@ assumeRole: $(DOTENV_TARGET)
 	docker run --rm -e "AWS_ACCOUNT_ID" -e "AWS_ROLE" amaysim/aws:1.1.3 assume-role.sh >> $(DOTENV_TARGET)
 .PHONY: assumeRole
 
+dockerBuild:
+	docker build -t $(DOCKER_IMAGE):$(BUILD_VERSION) .
+	docker tag $(DOCKER_IMAGE):$(BUILD_VERSION) $(DOCKER_IMAGE):latest
+
+ecrLogin: $(ENV_RM_REQUIRED) $(DOTENV_TARGET)
+	$(shell aws ecr get-login --no-include-email --region ap-southeast-2)
+
+dockerPush:
+	docker push $(DOCKER_IMAGE):$(BUILD_VERSION)
+	docker push $(DOCKER_IMAGE):latest
+
+###########
+# ENVFILE #
+###########
+
 .env:
 	@echo "Create .env with .env.template"
 	cp .env.template .env
 	echo "" >> .env
 	echo "BUILD_VERSION=$(BUILD_VERSION)" >> .env
+	echo "DOCKER_IMAGE=$(DOCKER_IMAGE)" >> .env
 
 # Create/Overwrite .env with $(DOTENV)
 dotenv:
 	@echo "Overwrite .env with $(DOTENV)"
 	cp $(DOTENV) .env
 	echo "BUILD_VERSION=$(BUILD_VERSION)" >> .env
+	echo "DOCKER_IMAGE=$(DOCKER_IMAGE)" >> .env
+
+# Removes the .env file before each deploy to force regeneration without cleaning the whole environment
+rm_env:
+	rm -f .env
+
+###################
+# PRIVATE TARGETS #
+###################
+
