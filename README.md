@@ -33,9 +33,9 @@ The [script](scripts/deploy.py) does the following:
 
 Once you are ready for the version you've deployed to start receiving _live_ traffic, you can do a cutover by running `make cutover`.
 
-This involves changing the ALB's default rule to point to the version you deployed. Changing ALB rules is atomic and instantly takes effect.
+The [cutover script](scripts/cutover.py) changes the ALB's default rule to point to the version you deployed. Changing ALB rules is atomic and instantly takes effect.
 
-After cutting over, the old versions still exist. This is so you can instantly cut back by running the cutover stage in the old pipeline.
+After cutting over, the old versions are not automatically removed. This is so you can instantly cut back by running the cutover stage in the old pipeline.
 
 ### Auto Cleanup
 
