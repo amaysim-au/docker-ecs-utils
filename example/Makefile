@@ -13,7 +13,7 @@ else
 	DOTENV_TARGET=.env
 endif
 
-DOCKER_NAMESPACE=$(ECR_AWS_ACCOUNT_ID).dkr.ecr.ap-southeast-2.amazonaws.com/devops
+DOCKER_NAMESPACE=<YOUR AWS ACCOUNT ID HERE>.dkr.ecr.ap-southeast-2.amazonaws.com/devops
 DOCKER_IMAGE=$(DOCKER_NAMESPACE)/ok
 
 ##################
@@ -64,14 +64,12 @@ dockerPush:
 	cp .env.template .env
 	echo "" >> .env
 	echo "BUILD_VERSION=$(BUILD_VERSION)" >> .env
-	echo "DOCKER_IMAGE=$(DOCKER_IMAGE)" >> .env
 
 # Create/Overwrite .env with $(DOTENV)
 dotenv:
 	@echo "Overwrite .env with $(DOTENV)"
 	cp $(DOTENV) .env
 	echo "BUILD_VERSION=$(BUILD_VERSION)" >> .env
-	echo "DOCKER_IMAGE=$(DOCKER_IMAGE)" >> .env
 
 # Removes the .env file before each deploy to force regeneration without cleaning the whole environment
 rm_env:
