@@ -9,6 +9,10 @@ A collection of scripts for deploying [AWS ECS Services](https://docs.aws.amazon
   * Uses AWS Application Load Balancer routing rules for blue/green, not DNS
   * Uses [3 Musketeers](https://3musketeers.io/)
 
+## Prerequisites
+
+Requires Make, Docker and docker-compose to run this utility. To deploy, you will need a functional ECS Cluster, as well as an _application stack_ that contains the load balancer.
+
 ## Targets
 
 ### Deploy
