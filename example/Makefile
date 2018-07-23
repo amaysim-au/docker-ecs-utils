@@ -13,7 +13,7 @@ else
 	DOTENV_TARGET=.env
 endif
 
-DOCKER_NAMESPACE=<YOUR AWS ACCOUNT ID HERE>.dkr.ecr.ap-southeast-2.amazonaws.com/devops
+DOCKER_NAMESPACE=123456789987.dkr.ecr.ap-southeast-2.amazonaws.com/devops
 DOCKER_IMAGE=$(DOCKER_NAMESPACE)/ok
 
 ##################

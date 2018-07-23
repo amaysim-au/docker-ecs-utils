@@ -2,7 +2,7 @@
     "containerDefinitions": [
         {
             "essential": true,
-            "image": "<YOUR ECR URL HERE>:${BUILD_VERSION}",
+            "image": "123456789987.dkr.ecr.ap-southeast-2.amazonaws.com/devops/ok:${BUILD_VERSION}",
             "name": "${ECS_APP_NAME}",
             "portMappings": [
                 {

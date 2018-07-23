@@ -41,9 +41,20 @@ After cutting over, the old versions are not automatically removed. This is so y
 
 At some point you will want to clean up old deployments. Running `make autocleanup` will remove _any versions that are not live_ by deleting the CloudFormation stacks.
 
-## Example
+## Cookiecutter Template
 
-See the [example](example/) for more detail on how to use it. You can copy these files to your app and use them after updating:
+You can use this repo to create your own ECS project using [cookiecutter](https://github.com/audreyr/cookiecutter).
 
-  * `DOCKER_NAMESPACE`/`DOCKER_IMAGE` in the [Makefile](example/Makefile) (i.e. `<YOUR AWS ACCOUNT ID HERE>` and the namespace/image name).
-  * `image` in [deployment/ecs.json](examples/deployment/ecs.json)
+Install the latest version of Cookiecutter:
+
+```
+pip install -U cookiecutter
+```
+
+Generate your ECS project:
+
+```
+cookiecutter https://github.com/amaysim-au/docker-ecs-utils
+```
+
+You can find an example of a generated project in [example/](example).

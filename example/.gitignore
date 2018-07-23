@@ -1,2 +1,4 @@
 .env*
 !.env.template
+deployment/ecs-env.json
+deployment/ecs-config-env.yml
