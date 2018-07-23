@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
+"""Command-line utility to deploy an AWS ECS Service as well as some helper functions"""
 
-import sys, os, yaml, json, datetime
-import boto3, botocore
+import os
 import re
-import time
+import datetime
+import json
+import yaml
+import boto3
+import botocore
 
 
 def get_priority(rules):
     """Returns the next available priority when given the response from aws elbv2 describe-rules"""
+
     priorities = [rule['Priority'] for rule in rules]
     i = 1
     rule_priority = None
@@ -19,9 +24,9 @@ def get_priority(rules):
 
 
 def create_or_update_stack(stack_name, template, parameters, tags):
-    'Update or create stack'
+    """Update or create stack synchronously, returns the stack ID"""
 
-    cf = boto3.client('cloudformation')
+    cloudformation = boto3.client('cloudformation')
 
     template_data = _parse_template(template)
 
@@ -35,12 +40,12 @@ def create_or_update_stack(stack_name, template, parameters, tags):
     try:
         if _stack_exists(stack_name):
             print('Updating {}'.format(stack_name))
-            stack_result = cf.update_stack(**params)
-            waiter = cf.get_waiter('stack_update_complete')
+            stack_result = cloudformation.update_stack(**params)
+            waiter = cloudformation.get_waiter('stack_update_complete')
         else:
             print('Creating {}'.format(stack_name))
-            stack_result = cf.create_stack(**params)
-            waiter = cf.get_waiter('stack_create_complete')
+            stack_result = cloudformation.create_stack(**params)
+            waiter = cloudformation.get_waiter('stack_create_complete')
         print("...waiting for stack to be ready...")
         waiter.wait(StackName=stack_name)
     except botocore.exceptions.ClientError as ex:
@@ -50,19 +55,19 @@ def create_or_update_stack(stack_name, template, parameters, tags):
         else:
             raise
     else:
-        return cf.describe_stacks(StackName=stack_result['StackId'])
+        return cloudformation.describe_stacks(StackName=stack_result['StackId'])
 
 
 def _parse_template(template):
-    cf = boto3.client('cloudformation')
-    cf.validate_template(TemplateBody=template)
+    cloudformation = boto3.client('cloudformation')
+    cloudformation.validate_template(TemplateBody=template)
     return template
 
 
 def _stack_exists(stack_name):
-    cf = boto3.client('cloudformation')
+    cloudformation = boto3.client('cloudformation')
     try:
-        response = cf.describe_stacks(
+        response = cloudformation.describe_stacks(
             StackName=stack_name
         )
         stacks = response['Stacks']
@@ -78,6 +83,10 @@ def _stack_exists(stack_name):
 
 
 def generate_environment_object():
+    """Given a .env file, returns an environment object as per https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ecs-taskdefinition-containerdefinitions.html#cloudformationn-ecs-taskdefinition-containerdefinition-environment
+
+    Values are pulled from the running environment."""
+
     whitelisted_vars = [
         "AWS_SECRET_ACCESS_KEY",
         "AWS_SESSION_TOKEN",
@@ -101,79 +110,80 @@ def generate_environment_object():
             )
     return environment
 
-def get_list_of_rules():
+
+def get_list_of_rules(app_stack_name):
+    """Given a CloudFormation stack name, returns a list of routing rules present on the stack's ALB"""
+
     cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stack_resources(
-        StackName='ECS-{cluster_name}-App-{app_name}'.format(
-            cluster_name=os.environ['ECS_CLUSTER_NAME'],
-            app_name=os.environ['ECS_APP_NAME']),
+        StackName=app_stack_name,
         LogicalResourceId='ALBListenerSSL'
     )
     alb_listener = response['StackResources'][0]['PhysicalResourceId']
 
     client = boto3.client('elbv2')
-    response = client.describe_rules(ListenerArn = alb_listener)
+    response = client.describe_rules(ListenerArn=alb_listener)
     return response['Rules']
 
 
 def get_load_balancer_type(app_stack_name):
+    """Given an application stack, queries CloudFormation and returns the type of load balancer it was created with"""
+
     cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stacks(
         StackName=app_stack_name
     )
     try:
         load_balancer_type = [parameter['ParameterValue'] for parameter in response['Stacks'][0]['Parameters'] if parameter['ParameterKey'] == "LBType"][0]
-    except:
+    except (KeyError, IndexError):
         print('Could not find LBType parameter in response: {}'.format(response))
     return load_balancer_type
 
 
-def main():
-    print("Beginning deployment of {}...".format(os.environ['ECS_APP_NAME']))
+def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_zone, base_path, config, task_definition, template):
+    """Core function for deploying an ECS Service"""
 
-    template_path = os.environ.get('ECS_APP_VERSION_TEMPLATE_PATH', '/scripts/ecs-cluster-application-version.yml')
+    print("Beginning deployment of {}...".format(app_name))
+
     version_stack_name = "ECS-{cluster_name}-App-{app_name}-{version}".format(
-        cluster_name=os.environ['ECS_CLUSTER_NAME'],
-        app_name=os.environ['ECS_APP_NAME'],
-        version=os.environ['BUILD_VERSION']
+        cluster_name=cluster_name,
+        app_name=app_name,
+        version=version
     )
-    app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=os.environ['ECS_CLUSTER_NAME'], app=os.environ['ECS_APP_NAME'])
+    app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
 
     load_balancer_type = get_load_balancer_type(app_stack_name)
     print("Load balancer type is {}.".format(load_balancer_type))
 
     print("Loading configuration files...")
-    template = open(template_path, 'r').read()
-    config = yaml.safe_load(open('deployment/ecs-config-env.yml','r').read())
-    task_definition = json.loads(open('deployment/ecs-env.json','r').read())
 
     print("Generating environment variable configuration...")
     environment = generate_environment_object()
-    for index, value in enumerate(task_definition['containerDefinitions']):
+    for index, value in enumerate(task_definition['containerDefinitions']):  # pylint: disable=unused-variable
         task_definition['containerDefinitions'][index]['environment'] = environment
     print("Task definition generated:")
     print(json.dumps(task_definition, indent=2, default=str))
 
-    print("Generating Parmeters for CloudFormation template ({})".format(template_path))
+    print("Generating Parmeters for CloudFormation template")
     if load_balancer_type != "None":  # this is intentionally a string
-        container_port = [x['portMappings'][0]['containerPort'] for x in task_definition['containerDefinitions'] if x['name'] == os.environ['ECS_APP_NAME']][0]
+        container_port = [x['portMappings'][0]['containerPort'] for x in task_definition['containerDefinitions'] if x['name'] == app_name][0]
 
     parameters = [
         {
             "ParameterKey": "Name",
-            "ParameterValue": os.environ['ECS_APP_NAME']
+            "ParameterValue": app_name
         },
         {
             "ParameterKey": 'ClusterName',
-            "ParameterValue": os.environ['ECS_CLUSTER_NAME']
+            "ParameterValue": cluster_name
         },
         {
             "ParameterKey": 'Environment',
-            "ParameterValue": os.environ['ENV']
+            "ParameterValue": env
         },
         {
             "ParameterKey": 'Version',
-            "ParameterValue": os.environ['BUILD_VERSION']
+            "ParameterValue": version
         },
         {
             "ParameterKey": 'LBType',
@@ -197,11 +207,11 @@ def main():
             },
             {
                 "ParameterKey": 'Domain',
-                "ParameterValue": os.environ['AWS_HOSTED_ZONE']
+                "ParameterValue": aws_hosted_zone
             },
             {
                 "ParameterKey": 'Path',
-                "ParameterValue": os.environ['BASE_PATH']
+                "ParameterValue": base_path
             }
         ]
         for extra_parameter in extra_parameters:
@@ -236,7 +246,6 @@ def main():
         for extra_parameter in extra_parameters:
             parameters.append(extra_parameter)
 
-
     print("Uploading Task Definition...")
     ecs = boto3.client('ecs')
     response = ecs.register_task_definition(**task_definition)
@@ -255,10 +264,10 @@ def main():
             )
             listener_rule = response['StackResources'][0]['PhysicalResourceId']
             print("Listener Rule already exists, not setting priority.")
-        except:
-            pass
-        if listener_rule == None:
-            rules = get_list_of_rules()
+        except (KeyError, IndexError):
+            print("Listener Rule does not already exist, getting priority...")
+        if listener_rule is None:
+            rules = get_list_of_rules(app_stack_name)
             priority = get_priority(rules)
         print("Rule priority is {}.".format(priority))
 
@@ -289,7 +298,7 @@ def main():
                 "ParameterValue": alb_scheme
             }
         )
-        if priority != None:
+        if priority is not None:
             parameters.append({
                 "ParameterKey": 'RulePriority',
                 "ParameterValue": str(priority)
@@ -300,22 +309,22 @@ def main():
                 "UsePreviousValue": True
             })
 
-    if config.get('autoscaling') != None:
+    if config.get('autoscaling') is not None:
         parameters.append({
             "ParameterKey": 'Autoscaling',
             "ParameterValue": str(config['autoscaling'])
         })
-    if config.get('autoscaling_target') != None:
+    if config.get('autoscaling_target') is not None:
         parameters.append({
             "ParameterKey": 'AutoscalingTargetValue',
             "ParameterValue": str(config['autoscaling_target'])
         })
-    if config.get('autoscaling_max_size') != None:
+    if config.get('autoscaling_max_size') is not None:
         parameters.append({
             "ParameterKey": 'AutoscalingMaxSize',
             "ParameterValue": str(config['autoscaling_max_size'])
         })
-    if config.get('autoscaling_min_size') != None:
+    if config.get('autoscaling_min_size') is not None:
         parameters.append({
             "ParameterKey": 'AutoscalingMinSize',
             "ParameterValue": str(config['autoscaling_min_size'])
@@ -328,19 +337,19 @@ def main():
     tags = [
         {
             'Key': 'Platform',
-            'Value': os.environ['ECS_APP_NAME']
+            'Value': app_name
         },
         {
             'Key': 'Environment',
-            'Value': os.environ['ENV']
+            'Value': env
         },
         {
             'Key': 'Realm',
-            'Value': os.environ['REALM']
+            'Value': realm
         },
         {
             'Key': 'Version',
-            'Value': os.environ['BUILD_VERSION']
+            'Value': version
         }
     ]
 
@@ -379,7 +388,7 @@ def main():
             service = response['StackResources'][0]['PhysicalResourceId']
             print('Outputting events for service {}:'.format(service))
             response = cloudformation.describe_stack_resources(
-                StackName="ECS-{}".format(os.environ['ECS_CLUSTER_NAME']),
+                StackName="ECS-{}".format(app_name),
                 LogicalResourceId='ECSCluster'
             )
             cluster = response['StackResources'][0]['PhysicalResourceId']
@@ -401,6 +410,25 @@ def main():
         elapsed_time = datetime.datetime.now() - start_time
         print('Health check passed in {}'.format(elapsed_time))
         print("Done.")
+
+
+def main():
+    """Entrypoint for CLI"""
+
+    template_path = os.environ.get('ECS_APP_VERSION_TEMPLATE_PATH', '/scripts/ecs-cluster-application-version.yml')
+    app_name = os.environ['ECS_APP_NAME']
+    env = os.environ['ENV']
+    realm = os.environ['ENV']
+    cluster_name = os.environ['ECS_CLUSTER_NAME']
+    version = os.environ['BUILD_VERSION']
+    aws_hosted_zone = os.environ['AWS_HOSTED_ZONE']
+    base_path = os.environ['BASE_PATH']
+
+    config = yaml.safe_load(open('deployment/ecs-config-env.yml', 'r').read())
+    task_definition = json.loads(open('deployment/ecs-env.json', 'r').read())
+    template = open(template_path, 'r').read()
+
+    deploy_ecs_service(app_name=app_name, env=env, realm=realm, cluster_name=cluster_name, version=version, aws_hosted_zone=aws_hosted_zone, base_path=base_path, config=config, task_definition=task_definition, template=template)
 
 
 if __name__ == "__main__":

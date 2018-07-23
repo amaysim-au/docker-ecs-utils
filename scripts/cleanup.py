@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-import sys, os
-import boto3, botocore
-from pprint import pprint
+"""CLI and function for targeted cleanup"""
+
+import sys
+import os
+import boto3
+import botocore
 from deploy import get_list_of_rules
+
 
 def cleanup_version_stack(cluster_name, app_name, version):
 
@@ -13,16 +17,12 @@ def cleanup_version_stack(cluster_name, app_name, version):
         app_name=app_name,
         version=version
     )
-    alb_stack_name = 'ECS-{cluster_name}-App-{app_name}'.format(
-        cluster_name=cluster_name,
-        app_name=app_name
-    )
 
     alb_default_target_group = ""
 
     rules = get_list_of_rules()
     for rule in rules:
-        if rule['IsDefault'] == True:
+        if rule['IsDefault'] is True:
             alb_default_target_group = rule['Actions'][0]['TargetGroupArn']
             break
 
@@ -65,8 +65,7 @@ def cleanup_version_stack(cluster_name, app_name, version):
             print("{resource_status} {logical_resource_id} {resource_status_reason}".format(
                 resource_status=stack_event['ResourceStatus'],
                 logical_resource_id=stack_event['LogicalResourceId'],
-                resource_status_reason=stack_event['ResourceStatusReason']
-                )
+                resource_status_reason=stack_event['ResourceStatusReason'])
             )
 
     print('Stack deletion complete')

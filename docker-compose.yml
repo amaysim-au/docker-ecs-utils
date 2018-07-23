@@ -3,7 +3,18 @@ services:
   ecs:
     image: amaysim/ecs-utils:local
     build: .
-    env_file: .env
     volumes:
       - .:/srv/app:Z
-
+  pylint:
+    image: clburlison/pylint
+    entrypoint: ["pylint"]
+    volumes:
+      - .:/code:Z
+    network_mode: "none"
+    working_dir: /code
+  flake8:
+    image: eeacms/flake8
+    volumes:
+      - .:/code:Z
+    network_mode: "none"
+    working_dir: /code

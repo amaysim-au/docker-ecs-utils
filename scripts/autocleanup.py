@@ -1,26 +1,21 @@
 #!/usr/bin/env python3
-import sys, os
-import boto3, botocore
-import datetime
+"""CLI and function for autocleanup"""
 
-from pprint import pprint
+import os
+import boto3
+import datetime
 from cleanup import cleanup_version_stack
 from deploy import get_list_of_rules
 
-cloudformation = boto3.client('cloudformation')
 
 def get_alb_default_target_group(cluster_name, app_name):
-
-    alb_stack_name = 'ECS-{cluster_name}-App-{app_name}'.format(
-        cluster_name=cluster_name,
-        app_name=app_name
-    )
+    """Return the Target Group for the default routing rule of an ALB"""
 
     alb_default_target_group = ""
 
     rules = get_list_of_rules()
     for rule in rules:
-        if rule['IsDefault'] == True:
+        if rule['IsDefault'] is True:
             alb_default_target_group = rule['Actions'][0]['TargetGroupArn']
             break
 
@@ -29,7 +24,9 @@ def get_alb_default_target_group(cluster_name, app_name):
 
     return alb_default_target_group
 
+
 def list_stacks(cluster_name, app_name):
+    """List stacks matching the app stack convention"""
 
     stack_name_prefix = "ECS-{cluster_name}-App-{app_name}-".format(
         cluster_name=cluster_name,
@@ -39,6 +36,7 @@ def list_stacks(cluster_name, app_name):
 
     stack_list = []
 
+    cloudformation = boto3.client('cloudformation')
     paginator = cloudformation.get_paginator('list_stacks')
     response_iterator = paginator.paginate(StackStatusFilter=['CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'])
     for page in response_iterator:
@@ -67,6 +65,7 @@ def list_stacks(cluster_name, app_name):
 
     return stack_list
 
+
 def filter_old_stacks(stacks, age_seconds):
     filtered_stacks = []
 
@@ -76,11 +75,13 @@ def filter_old_stacks(stacks, age_seconds):
 
     return filtered_stacks
 
+
 def filter_not_cutover(stacks, cluster_name, app_name):
     filtered_stacks = []
 
     alb_default_target_group = get_alb_default_target_group(cluster_name, app_name)
 
+    cloudformation = boto3.client('cloudformation')
     for stack in stacks:
         # Fetching Application Version TargetGroup ARN
         response = cloudformation.describe_stack_resources(
@@ -92,6 +93,7 @@ def filter_not_cutover(stacks, cluster_name, app_name):
             filtered_stacks.append(stack)
 
     return filtered_stacks
+
 
 def filter_excludes(stacks, stack_excludes):
     filtered_stacks = []
@@ -110,15 +112,24 @@ def filter_excludes(stacks, stack_excludes):
 
     return filtered_stacks
 
+
 def get_stack_version(stack_name):
+    """Return the `Version` output of a given CloudFormation stack"""
+
+    cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stacks(StackName=stack_name)
     for output in response['Stacks'][0]['Outputs']:
         if output['OutputKey'] == 'Version':
             return output['OutputValue']
 
+
 def get_stack_termination_protection(stack_name):
+    """Return the state of termination protection for a given CloudFormation stack"""
+
+    cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stacks(StackName=stack_name)
     return response['Stacks'][0]['EnableTerminationProtection']
+
 
 if __name__ == "__main__":
     stacks = list_stacks(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'])
