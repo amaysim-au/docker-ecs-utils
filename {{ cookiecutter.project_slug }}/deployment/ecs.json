@@ -1,0 +1,26 @@
+{
+    "containerDefinitions": [
+        {
+            "essential": true,
+            "image": "{{ cookiecutter.ecr_aws_account_id }}.dkr.ecr.ap-southeast-2.amazonaws.com/{{ cookiecutter.docker_namespace }}/{{ cookiecutter.docker_image }}:${BUILD_VERSION}",
+            "name": "${ECS_APP_NAME}",
+            "portMappings": [
+                {
+                    "containerPort": 8888
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "ecs-${ECS_APP_NAME}-${ENV}",
+                    "awslogs-region": "ap-southeast-2",
+                    "awslogs-stream-prefix": "${BUILD_VERSION}"
+                }
+            }
+        }
+    ],
+    "family": "${ECS_APP_NAME}-${ENV}",
+    "volumes": [],
+    "memory": "128",
+    "cpu": "128"
+}

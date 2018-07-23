@@ -1,0 +1,10 @@
+---
+lb_health_check: /
+lb_health_check_grace_period: 30
+lb_deregistration_delay: 60
+
+autoscaling: Enable
+autoscaling_target: 60
+autoscaling_min_size: 3
+autoscaling_max_size: 20
+

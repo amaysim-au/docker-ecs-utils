@@ -4,3 +4,4 @@ example/.env
 scripts/__pycache__/
 .env*
 !.env.template
+ecs-utils-test-project/

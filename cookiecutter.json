@@ -1,0 +1,9 @@
+{
+    "project_name": "My Project Name With Capitals And Spaces",
+    "project_slug": "{{ cookiecutter.project_name.lower().replace(' ', '-') }}",
+    "ecr_aws_account_id": "123456789987",
+    "docker_namespace": "devops",
+    "docker_image": "ok"
+}
+
+
