@@ -1,4 +1,10 @@
-VERSION = 2.6.1
+ifdef DOTENV
+	DOTENV_TARGET=dotenv
+else
+	DOTENV_TARGET=.env
+endif
+
+VERSION = 2.7.0
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
 TAG = $(VERSION)
 
@@ -15,6 +21,10 @@ shell:
 	docker-compose down
 	docker-compose run --rm shell
 
+lint:
+	docker-compose run --rm flake8 --ignore 'E501' scripts/*.py
+	docker-compose run --rm pylint scripts/*.py
+
 test:
 	docker-compose down
 	docker-compose run --rm ecs scripts/test.py
@@ -24,8 +34,3 @@ gitTag:
 	-git push origin :refs/tags/$(TAG)
 	git tag $(TAG)
 	git push origin $(TAG)
-
-# Example of how to deploy using docker compose
-deploy:
-	docker-compose down
-	docker-compose run --rm rancher make -f /scripts/Makefile deploy

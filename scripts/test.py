@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
 
+import json
 import unittest
 from unittest.mock import patch
+import deploy
 
-from deploy import *
 
 class GetPriorityTest(unittest.TestCase):
     def test_1(self):
         """Simple test to get next priority"""
         rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/2cc6c973c4d32f55","Priority":"1","Conditions":[{"Field":"host-header","Values":["host1.asdf.com"]},{"Field":"path-pattern","Values":["/path2"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/f9994e3e3a55d6dd","Priority":"2","Conditions":[{"Field":"path-pattern","Values":["/path1"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
-        priority = get_priority(rules)
+        priority = deploy.get_priority(rules)
         self.assertEqual(priority, 3)
 
     def test_2(self):
         """Test with gap in list of priorities"""
         rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/5cdf34d5cf48fabc","Priority":"1","Conditions":[{"Field":"path-pattern","Values":["/asdffdas"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/2cc6c973c4d32f55","Priority":"2","Conditions":[{"Field":"host-header","Values":["host1.asdf.com"]},{"Field":"path-pattern","Values":["/path2"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/284a6e35adc73d71","Priority":"5","Conditions":[{"Field":"path-pattern","Values":["/32452345"]}],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":false},{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
-        priority = get_priority(rules)
+        priority = deploy.get_priority(rules)
         self.assertEqual(priority, 3)
 
     def test_3(self):
         """Test with no rules except default"""
         rules = json.loads('[{"RuleArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:listener-rule/app/asdfasdfasdf/ba564ec55606a717/9c431593f1c78965/74a74e7da03f7ddb","Priority":"default","Conditions":[],"Actions":[{"Type":"forward","TargetGroupArn":"arn:aws:elasticloadbalancing:ap-southeast-2:12345678987:targetgroup/ecs-c-ALBDe-2TD7HNS9J92H/134e396d75ebd3a6"}],"IsDefault":true}]')
-        priority = get_priority(rules)
+        priority = deploy.get_priority(rules)
         self.assertEqual(priority, 1)
 
 
@@ -40,7 +41,7 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
                 "value": "NonProd"
             }
         ]
-        environment = generate_environment_object()
+        environment = deploy.generate_environment_object()
         self.assertEqual(environment, expected_environment)
 
     @patch('builtins.open', unittest.mock.mock_open(read_data="ENV\n\n\nREALM\n#asdfasdf\nECS_APP_NAME\nAWS_SECRET_ACCESS_KEY"))
@@ -57,7 +58,7 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
                 "value": '""asdf\'asdfdfas{"asdf":"asdfa\'sd"}'
             }
         ]
-        environment = generate_environment_object()
+        environment = deploy.generate_environment_object()
         self.assertEqual(environment, expected_environment)
 
     @patch('builtins.open', unittest.mock.mock_open(read_data='ENV=\sdfsa!!asdfasdf#asdfn\n\nREALM=""asdf\'asdfdfas{"asdf":"asdfa\'sd"}\n#asdfasdf\nECS_APP_NAME=dddddd # comment\nAWS_SECRET_ACCESS_KEY'))
@@ -78,7 +79,7 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
                 "value": "dddddd"
             }
         ]
-        environment = generate_environment_object()
+        environment = deploy.generate_environment_object()
         self.assertEqual(environment, expected_environment)
 
     @patch('builtins.open', unittest.mock.mock_open(read_data='ENV=Dev\nREGION'))
@@ -89,9 +90,9 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
             {
                 "name": "ENV",
                 "value": "Dev"
-            }        
+            }
         ]
-        environment = generate_environment_object()
+        environment = deploy.generate_environment_object()
         self.assertEqual(environment, expected_environment)
 
 
@@ -101,4 +102,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
