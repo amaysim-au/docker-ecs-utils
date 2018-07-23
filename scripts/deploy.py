@@ -264,7 +264,7 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
             )
             listener_rule = response['StackResources'][0]['PhysicalResourceId']
             print("Listener Rule already exists, not setting priority.")
-        except (KeyError, IndexError):
+        except (KeyError, IndexError, botocore.exceptions.ClientError):
             print("Listener Rule does not already exist, getting priority...")
         if listener_rule is None:
             rules = get_list_of_rules(app_stack_name)

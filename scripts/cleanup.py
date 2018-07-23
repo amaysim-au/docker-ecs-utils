@@ -17,10 +17,11 @@ def cleanup_version_stack(cluster_name, app_name, version):
         app_name=app_name,
         version=version
     )
+    app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
 
     alb_default_target_group = ""
 
-    rules = get_list_of_rules()
+    rules = get_list_of_rules(app_stack_name)
     for rule in rules:
         if rule['IsDefault'] is True:
             alb_default_target_group = rule['Actions'][0]['TargetGroupArn']

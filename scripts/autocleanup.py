@@ -11,9 +11,11 @@ from deploy import get_list_of_rules
 def get_alb_default_target_group(cluster_name, app_name):
     """Return the Target Group for the default routing rule of an ALB"""
 
+    app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
+
     alb_default_target_group = ""
 
-    rules = get_list_of_rules()
+    rules = get_list_of_rules(app_stack_name)
     for rule in rules:
         if rule['IsDefault'] is True:
             alb_default_target_group = rule['Actions'][0]['TargetGroupArn']
