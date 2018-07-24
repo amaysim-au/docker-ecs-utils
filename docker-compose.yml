@@ -18,3 +18,9 @@ services:
       - .:/code:Z
     network_mode: "none"
     working_dir: /code
+  cookiecutter:
+    image: amaysim/cookiecutter:1.5.1
+    env_file: .env
+    volumes:
+      - ~/.ssh:/root/.ssh:Z
+      - .:/srv/app:Z

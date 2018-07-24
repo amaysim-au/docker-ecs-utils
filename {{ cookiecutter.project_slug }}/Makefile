@@ -13,8 +13,8 @@ else
 	DOTENV_TARGET=.env
 endif
 
-DOCKER_NAMESPACE=123456789987.dkr.ecr.ap-southeast-2.amazonaws.com/devops
-DOCKER_IMAGE=$(DOCKER_NAMESPACE)/ok
+DOCKER_NAMESPACE={{ cookiecutter.ecr_aws_account_id }}.dkr.ecr.ap-southeast-2.amazonaws.com/{{ cookiecutter.docker_namespace }}
+DOCKER_IMAGE=$(DOCKER_NAMESPACE)/{{ cookiecutter.docker_image }}
 
 ##################
 # PUBLIC TARGETS #

@@ -2,7 +2,7 @@
     "containerDefinitions": [
         {
             "essential": true,
-            "image": "123456789987.dkr.ecr.ap-southeast-2.amazonaws.com/devops/ok:${BUILD_VERSION}",
+            "image": "{{ cookiecutter.ecr_aws_account_id }}.dkr.ecr.ap-southeast-2.amazonaws.com/{{ cookiecutter.docker_namespace }}/{{ cookiecutter.docker_image }}:${BUILD_VERSION}",
             "name": "${ECS_APP_NAME}",
             "portMappings": [
                 {
