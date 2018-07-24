@@ -179,17 +179,93 @@ Resources:
         "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSAutoscalingRoleArn"
       ScalableDimension: ecs:service:DesiredCount
       ServiceNamespace: ecs
+
   ServiceScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
     Condition: isAutoscaling
     Properties:
-      PolicyName: !Sub '${AWS::StackName}-scale-target'
+      PolicyName: !Sub '${AWS::StackName}-scale-target-response-time'
       PolicyType: TargetTrackingScaling
       ScalingTargetId: !Ref 'ServiceScalingTarget'
       TargetTrackingScalingPolicyConfiguration:
         TargetValue: !Ref AutoscalingTargetValue
+        ScaleInCooldown: 180
+        ScaleOutCooldown: 60
+        CustomizedMetricSpecification:
+          MetricName: TargetResponseTime
+          Namespace: AWS/ApplicationELB
+          Statistic: Average
+          Dimensions:
+            - Name: TargetGroup
+              Value: !GetAtt ALBTargetGroup.TargetGroupFullName
+            - Name: LoadBalancer
+              Value:
+                Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBFullName"
+
+  # Target tracking does not ever scale down on missing data, so we have to create our own trigger to scale down
+  ServiceScalingNoRequests:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: isAutoscaling
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-scale-target-no-requests'
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 180
+        StepAdjustments:
+          - ScalingAdjustment: -2
+            MetricIntervalLowerBound: 0  # scale down no matter what
+          - ScalingAdjustment: -2
+            MetricIntervalUpperBound: 0
+
+  AlarmResponseTimeNoRequests:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: No requests
+      MetricName: RequestCount
+      Namespace: AWS/ApplicationELB
+      Statistic: Average
+      Period: '60'
+      EvaluationPeriods: '5'
+      Threshold: '0'
+      ComparisonOperator: LessThanOrEqualToThreshold
+      AlarmActions:
+        - Ref: ServiceScalingNoRequests
+      Dimensions:
+        - Name: TargetGroup
+          Value: !GetAtt ALBTargetGroup.TargetGroupFullName
+        - Name: LoadBalancer
+          Value:
+            Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBFullName"
+
+  ServiceScalingPolicyCPU:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: isAutoscaling
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-scale-target-cpu'
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 90
+        ScaleInCooldown: 180
+        ScaleOutCooldown: 60
         PredefinedMetricSpecification:
           PredefinedMetricType: ECSServiceAverageCPUUtilization
+
+  ServiceScalingPolicyMem:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: isAutoscaling
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-scale-target-mem'
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 95
+        ScaleInCooldown: 180
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
 
   Route53ALB:
     Type: AWS::Route53::RecordSet
