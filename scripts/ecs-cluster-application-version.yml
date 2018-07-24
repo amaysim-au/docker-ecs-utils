@@ -102,11 +102,11 @@ Resources:
       HealthCheckIntervalSeconds: 10
       HealthCheckPath: !Ref HealthCheckPath
       HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
+      HealthCheckTimeoutSeconds: 9
       HealthyThresholdCount: 2
       Port: 80
       Protocol: HTTP
-      UnhealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
           Value: !Ref DeregistrationDelay
