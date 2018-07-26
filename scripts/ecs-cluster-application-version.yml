@@ -227,8 +227,8 @@ Resources:
       Namespace: AWS/ApplicationELB
       Statistic: Average
       Period: '60'
-      EvaluationPeriods: '5'
-      Threshold: '0'
+      EvaluationPeriods: '1'
+      Threshold: '2'
       ComparisonOperator: LessThanOrEqualToThreshold
       AlarmActions:
         - Ref: ServiceScalingNoRequests
