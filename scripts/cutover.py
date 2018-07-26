@@ -9,6 +9,8 @@ import boto3
 from autocleanup import get_alb_default_target_group
 
 def get_cluster_full_name(cluster_name):
+    """Returns the automatically generated name of the cluster from the logical name we give it"""
+
     ecs = boto3.client('ecs')
     cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stack_resources(
@@ -66,6 +68,8 @@ def get_live_desired_count(cluster_name, app_name, cluster_full_name=None, next_
 
 
 def set_correct_service_size(cluster_name, app_name, version_stack_name, target_group):
+    """Ensures that the service being cutover has at least the same number of tasks as the currently live service."""
+
     cluster_full_name = get_cluster_full_name(cluster_name)
     cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stack_resources(
@@ -78,7 +82,7 @@ def set_correct_service_size(cluster_name, app_name, version_stack_name, target_
     current_count = get_current_count(cluster_name=cluster_name, cluster_full_name=cluster_full_name, service_full_name=service_full_name)
     print('Live service has {} tasks, this version has {}.'.format(desired_count, current_count))
     if current_count >= desired_count:
-        print('Number of running tasks ({}) is already correct.'.format(current_count))
+        print('Number of running tasks ({}) requires no change.'.format(current_count))
         return
     print('Updating this version to match.')
     ecs = boto3.client('ecs')
