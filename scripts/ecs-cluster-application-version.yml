@@ -83,6 +83,14 @@ Parameters:
       - None
       - ALB
       - NLB
+  DeploymentMaximum: 
+    Description: ECS deployment maximum healthy percent
+    Type: Number
+    Default: 100
+  DeploymentMinimum: 
+    Description: ECS deployment minimum healthy percent
+    Type: Number
+    Default: 0
 
 Conditions:
   isAutoscaling: !Equals [ !Ref Autoscaling, 'Enable']
@@ -158,6 +166,9 @@ Resources:
     Properties:
       TaskDefinition: !Ref TaskDefinitionArn
       DesiredCount: 1
+      DeploymentConfiguration:
+        MaximumPercent: !Ref DeploymentMaximum
+        MinimumHealthyPercent: !Ref DeploymentMinimum
       Cluster:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSClusterArn"
 
