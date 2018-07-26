@@ -4,7 +4,7 @@ else
 	DOTENV_TARGET=.env
 endif
 
-VERSION = 2.7.0
+VERSION = 2.8.0
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
 TAG = $(VERSION)
 
