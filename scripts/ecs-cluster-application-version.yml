@@ -211,12 +211,12 @@ Resources:
       PolicyType: StepScaling
       ScalingTargetId: !Ref 'ServiceScalingTarget'
       StepScalingPolicyConfiguration:
-        AdjustmentType: ChangeInCapacity
-        Cooldown: 180
+        AdjustmentType: PercentChangeInCapacity
+        Cooldown: 60
         StepAdjustments:
-          - ScalingAdjustment: -2
+          - ScalingAdjustment: -20
             MetricIntervalLowerBound: 0  # scale down no matter what
-          - ScalingAdjustment: -2
+          - ScalingAdjustment: -20
             MetricIntervalUpperBound: 0
 
   AlarmResponseTimeNoRequests:
