@@ -223,12 +223,12 @@ Resources:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmDescription: No requests
-      MetricName: RequestCount
+      MetricName: RequestCountPerTarget
       Namespace: AWS/ApplicationELB
-      Statistic: Average
+      Statistic: Sum
       Period: '60'
       EvaluationPeriods: '1'
-      Threshold: '2'
+      Threshold: '1'
       ComparisonOperator: LessThanOrEqualToThreshold
       AlarmActions:
         - Ref: ServiceScalingNoRequests
