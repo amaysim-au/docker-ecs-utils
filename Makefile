@@ -8,6 +8,9 @@ VERSION = 2.7.0-alb-scaling-v2
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
 TAG = $(VERSION)
 
+##################
+# PUBLIC TARGETS #
+##################
 dockerBuild:
 	docker build -t $(IMAGE_NAME) .
 
@@ -17,15 +20,15 @@ ecrLogin:
 dockerPush: ecrLogin
 	docker push $(IMAGE_NAME)
 
-shell:
+shell: $(DOTENV_TARGET)
 	docker-compose down
 	docker-compose run --rm shell
 
-lint:
+lint: $(DOTENV_TARGET)
 	docker-compose run --rm flake8 --ignore 'E501' scripts/*.py
 	docker-compose run --rm pylint scripts/*.py
 
-test:
+test: $(DOTENV_TARGET)
 	docker-compose down
 	docker-compose run --rm ecs scripts/test.py
 
@@ -34,3 +37,28 @@ gitTag:
 	-git push origin :refs/tags/$(TAG)
 	git tag $(TAG)
 	git push origin $(TAG)
+
+clone: $(DOTENV_TARGET)
+	docker-compose run --rm --entrypoint=sh cookiecutter -c "cookiecutter --no-input --overwrite-if-exists . project_name='ECS Utils Test Project' ecr_aws_account_id=\$$ECR_AWS_ACCOUNT_ID"
+	$(MAKE) -C ecs-utils-test-project .env
+
+recursive:
+	$(MAKE) -C ecs-utils-test-project dockerBuild ecrLogin dockerPush autocleanup deploy cutover
+
+###########
+# ENVFILE #
+###########
+# Create .env based on .env.template if .env does not exist
+.env:
+	@echo "Create .env with .env.template"
+	cp .env.template .env
+
+# Create/Overwrite .env with $(DOTENV)
+dotenv:
+	@echo "Overwrite .env with $(DOTENV)"
+	cp $(DOTENV) .env
+
+$(DOTENV):
+	$(info overwriting .env file with $(DOTENV))
+	cp $(DOTENV) .env
+.PHONY: $(DOTENV)
