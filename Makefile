@@ -42,6 +42,10 @@ clone: $(DOTENV_TARGET)
 	docker-compose run --rm --entrypoint=sh cookiecutter -c "cookiecutter --no-input --overwrite-if-exists . project_name='ECS Utils Test Project' ecr_aws_account_id=\$$ECR_AWS_ACCOUNT_ID"
 	$(MAKE) -C ecs-utils-test-project .env
 
+example: $(DOTENV_TARGET)
+	docker-compose run --rm --entrypoint=sh cookiecutter -c "cookiecutter --no-input --overwrite-if-exists . project_name='Example' ecr_aws_account_id=123456789987"
+.PHONY: example
+
 recursive:
 	$(MAKE) -C ecs-utils-test-project dockerBuild ecrLogin dockerPush autocleanup deploy cutover
 
