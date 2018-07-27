@@ -4,7 +4,7 @@ else
 	DOTENV_TARGET=.env
 endif
 
-VERSION = 2.7.0-alb-scaling-v2
+VERSION = 2.8.0-alb-scaling-v2
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
 TAG = $(VERSION)
 

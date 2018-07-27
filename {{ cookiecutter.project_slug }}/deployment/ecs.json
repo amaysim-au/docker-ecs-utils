@@ -4,6 +4,9 @@
             "essential": true,
             "image": "{{ cookiecutter.ecr_aws_account_id }}.dkr.ecr.ap-southeast-2.amazonaws.com/{{ cookiecutter.docker_namespace }}/{{ cookiecutter.docker_image }}:${BUILD_VERSION}",
             "name": "${ECS_APP_NAME}",
+            "linuxParameters": {
+                "initProcessEnabled": true
+            },
             "portMappings": [
                 {
                     "containerPort": 8888
