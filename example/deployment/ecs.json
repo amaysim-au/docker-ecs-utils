@@ -4,6 +4,9 @@
             "essential": true,
             "image": "123456789987.dkr.ecr.ap-southeast-2.amazonaws.com/devops/ok:${BUILD_VERSION}",
             "name": "${ECS_APP_NAME}",
+            "linuxParameters": {
+                "initProcessEnabled": true
+            },
             "portMappings": [
                 {
                     "containerPort": 8888
