@@ -6,12 +6,44 @@ CLI tool and function for changing the default rule of an ALB to point to a TG
 import os
 import datetime
 import boto3
-from autocleanup import get_alb_default_target_group
+from deploy import get_list_of_rules
+
+
+def get_alb_default_target_group(cluster_name, app_name):
+    """Return the Target Group for the default routing rule of an ALB"""
+
+    app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
+
+    alb_default_target_group = ""
+
+    rules = get_list_of_rules(app_stack_name)
+    for rule in rules:
+        if rule['IsDefault'] is True:
+            alb_default_target_group = rule['Actions'][0]['TargetGroupArn']
+            break
+
+    if alb_default_target_group == "":
+        raise Exception("Default action target group not found in ALB Listener")
+
+    return alb_default_target_group
+
+
+def get_version_target_group(version_stack_name):
+    """Returns the ARN of a Target Group for a given version stack"""
+
+    cloudformation = boto3.client('cloudformation')
+    response = cloudformation.describe_stack_resources(
+        StackName=version_stack_name,
+        LogicalResourceId='ALBTargetGroup'
+    )
+    target_group = response['StackResources'][0]['PhysicalResourceId']
+    print('Target Group ARN is: {}'.format(target_group))
+    return target_group
+
 
 def get_cluster_full_name(cluster_name):
     """Returns the automatically generated name of the cluster from the logical name we give it"""
 
-    ecs = boto3.client('ecs')
     cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stack_resources(
         StackName="ECS-{}".format(cluster_name),
@@ -52,12 +84,10 @@ def get_live_desired_count(cluster_name, app_name, cluster_full_name=None, next_
     response = ecs.list_services(**kwargs)
     next_token = response.get('nextToken')
     services = [x.split('/')[-1] for x in response['serviceArns']]  # returned data is ARN, we just want the name
-    response = ecs.describe_services(
-        cluster=cluster_full_name,
-        services=services)
+    response = ecs.describe_services(cluster=cluster_full_name, services=services)
 
     for service in response['services']:
-        if len(service['loadBalancers']) > 0:
+        if len(service['loadBalancers']) > 0:  # pylint: disable=len-as-condition
             if service['loadBalancers'][0]['targetGroupArn'] == default_target_group:
                 live_service = service
 
@@ -115,17 +145,17 @@ def wait_for_target_group_size(desired_count, target_group):
     assert targets >= desired_count
 
 
-def change_default_rule_tg(env, realm, cluster_name, app_name, version, aws_hosted_zone, base_path):
+def change_default_rule_tg(cluster_name, app_name, version, aws_hosted_zone, base_path):
+    """Main function for cutting over the default rule of a target group"""
+
     version_stack_name = "ECS-{cluster_name}-App-{app_name}-{version}".format(
         cluster_name=cluster_name,
         app_name=app_name,
         version=version
     )
     alb_stack_name = 'ECS-{cluster_name}-App-{app_name}'.format(
-        env=env,
         cluster_name=cluster_name,
-        app_name=app_name,
-        realm=realm
+        app_name=app_name
     )
 
     print('Beginning cutover for {}'.format('https://' + aws_hosted_zone + base_path))
@@ -138,12 +168,7 @@ def change_default_rule_tg(env, realm, cluster_name, app_name, version, aws_host
     alb_listener = response['StackResources'][0]['PhysicalResourceId']
     print('ALB ARN is: {}'.format(alb_listener))
 
-    response = cloudformation.describe_stack_resources(
-        StackName=version_stack_name,
-        LogicalResourceId='ALBTargetGroup'
-    )
-    target_group = response['StackResources'][0]['PhysicalResourceId']
-    print('Target Group ARN is: {}'.format(target_group))
+    target_group = get_version_target_group(version_stack_name)
 
     set_correct_service_size(cluster_name=cluster_name, app_name=app_name, version_stack_name=version_stack_name, target_group=target_group)
 
@@ -163,14 +188,12 @@ def change_default_rule_tg(env, realm, cluster_name, app_name, version, aws_host
 def main():
     """CLI entrypoint for cutover.py"""
 
-    env = os.environ['ENV']
-    realm = os.environ['REALM']
     cluster_name = os.environ['ECS_CLUSTER_NAME']
     app_name = os.environ['ECS_APP_NAME']
     version = os.environ['BUILD_VERSION']
     aws_hosted_zone = os.environ['AWS_HOSTED_ZONE']
     base_path = os.environ['BASE_PATH']
-    change_default_rule_tg(env=env, realm=realm, cluster_name=cluster_name, app_name=app_name, version=version, aws_hosted_zone=aws_hosted_zone, base_path=base_path)
+    change_default_rule_tg(cluster_name=cluster_name, app_name=app_name, version=version, aws_hosted_zone=aws_hosted_zone, base_path=base_path)
 
 
 if __name__ == "__main__":

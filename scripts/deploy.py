@@ -140,7 +140,7 @@ def get_load_balancer_type(app_stack_name):
     return load_balancer_type
 
 
-def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_zone, base_path, config, task_definition, template):
+def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_zone, base_path, config, task_definition, template):  # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements
     """Core function for deploying an ECS Service"""
 
     print("Beginning deployment of {}...".format(app_name))
