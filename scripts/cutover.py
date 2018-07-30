@@ -91,20 +91,27 @@ def set_correct_service_size(cluster_name, app_name, version_stack_name, target_
         service=service_full_name,
         desiredCount=desired_count
     )
+    print('Update in progress...')
+    wait_for_target_group_size(desired_count, target_group)
 
-    elbv2 = boto3.client('elbv2')
-    waiter = elbv2.get_waiter('target_in_service')
+
+def wait_for_target_group_size(desired_count, target_group):
+    """Waits until a target group has a given number of healthy targets"""
+
+    targets = []
+    elapsed_time = 0
+    timeout = 120
     start_time = datetime.datetime.now()
-    try:
-        response = waiter.wait(TargetGroupArn=target_group)
-    except botocore.exceptions.WaiterError:
-        print('Health check did not pass!')
-
-    response = elbv2.describe_target_health(TargetGroupArn=target_group)
-    targets = len([x for x in response['TargetHealthDescriptions'] if x['TargetHealth']['State'] == 'healthy'])
-    elapsed_time = datetime.datetime.now() - start_time
-    print('Health check passed in {}'.format(elapsed_time))
-    print('There are now {} healthy tasks.'.format(targets))
+    print('Polling until there are {} healthy tasks.'.format(desired_count))
+    while targets < desired_count and elapsed_time < datetime.timedelta(seconds=timeout):
+        elbv2 = boto3.client('elbv2')
+        response = elbv2.describe_target_health(TargetGroupArn=target_group)
+        targets = len([x for x in response['TargetHealthDescriptions'] if x['TargetHealth']['State'] == 'healthy'])
+        elapsed_time = datetime.datetime.now() - start_time
+        print('There are now {} healthy tasks.'.format(targets))
+    if elapsed_time > datetime.timedelta(seconds=timeout):
+        raise Exception('Could not start additional tasks before {}s timeout.'.format(timeout))
+    print('Additional containers started in {}'.format(elapsed_time))
     assert targets >= desired_count
 
 
