@@ -98,10 +98,10 @@ def set_correct_service_size(cluster_name, app_name, version_stack_name, target_
 def wait_for_target_group_size(desired_count, target_group):
     """Waits until a target group has a given number of healthy targets"""
 
-    targets = []
-    elapsed_time = 0
+    targets = 0
     timeout = 120
     start_time = datetime.datetime.now()
+    elapsed_time = elapsed_time = datetime.datetime.now() - start_time
     print('Polling until there are {} healthy tasks.'.format(desired_count))
     while targets < desired_count and elapsed_time < datetime.timedelta(seconds=timeout):
         elbv2 = boto3.client('elbv2')
