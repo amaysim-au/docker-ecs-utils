@@ -4,6 +4,7 @@ CLI tool and function for changing the default rule of an ALB to point to a TG
 """
 
 import os
+import time
 import datetime
 import boto3
 from autocleanup import get_alb_default_target_group
@@ -100,6 +101,7 @@ def wait_for_target_group_size(desired_count, target_group):
 
     targets = 0
     timeout = 120
+    backoff = 0
     start_time = datetime.datetime.now()
     elapsed_time = elapsed_time = datetime.datetime.now() - start_time
     print('Polling until there are {} healthy tasks.'.format(desired_count))
@@ -108,7 +110,9 @@ def wait_for_target_group_size(desired_count, target_group):
         response = elbv2.describe_target_health(TargetGroupArn=target_group)
         targets = len([x for x in response['TargetHealthDescriptions'] if x['TargetHealth']['State'] == 'healthy'])
         elapsed_time = datetime.datetime.now() - start_time
-        print('There are now {} healthy tasks.'.format(targets))
+        print('There are {} healthy tasks.'.format(targets))
+        time.sleep(backoff)
+        backoff = backoff + 1
     if elapsed_time > datetime.timedelta(seconds=timeout):
         raise Exception('Could not start additional tasks before {}s timeout.'.format(timeout))
     print('Additional containers started in {}'.format(elapsed_time))
