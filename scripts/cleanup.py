@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """CLI and function for targeted cleanup"""
 
-import sys
 import os
 import boto3
 import botocore
-from deploy import get_list_of_rules
+from cutover import get_version_target_group
+from cutover import get_alb_default_target_group
 
 
 def cleanup_version_stack(cluster_name, app_name, version):
+    """Main function for cleaning up a given version stack"""
 
     cloudformation = boto3.client('cloudformation')
 
@@ -17,31 +18,14 @@ def cleanup_version_stack(cluster_name, app_name, version):
         app_name=app_name,
         version=version
     )
-    app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
 
-    alb_default_target_group = ""
+    alb_default_target_group = get_alb_default_target_group(cluster_name, app_name)
 
-    rules = get_list_of_rules(app_stack_name)
-    for rule in rules:
-        if rule['IsDefault'] is True:
-            alb_default_target_group = rule['Actions'][0]['TargetGroupArn']
-            break
-
-    if alb_default_target_group == "":
-        raise Exception("Default action target group not found in ALB Listener")
-
-    # Fetching Application Version TargetGroup ARN
-    response = cloudformation.describe_stack_resources(
-        StackName=version_stack_name,
-        LogicalResourceId='ALBTargetGroup'
-    )
-    target_group = response['StackResources'][0]['PhysicalResourceId']
-    print('Target Group ARN is: {}'.format(target_group))
+    target_group = get_version_target_group(version_stack_name)
 
     if target_group == alb_default_target_group:
         # Cannot cleanup, target group is in use
-        print("Error: Cannot cleanup, version {version} is live".format(version=version))
-        return False
+        raise Exception("Cannot cleanup, version {version} is live".format(version=version))
 
     response = cloudformation.delete_stack(
         StackName=version_stack_name
@@ -63,19 +47,15 @@ def cleanup_version_stack(cluster_name, app_name, version):
             if 'ResourceStatusReason' not in stack_event:
                 stack_event['ResourceStatusReason'] = ""
 
-            print("{resource_status} {logical_resource_id} {resource_status_reason}".format(
-                resource_status=stack_event['ResourceStatus'],
-                logical_resource_id=stack_event['LogicalResourceId'],
-                resource_status_reason=stack_event['ResourceStatusReason'])
+            print(
+                "{resource_status} {logical_resource_id} {resource_status_reason}".format(
+                    resource_status=stack_event['ResourceStatus'],
+                    logical_resource_id=stack_event['LogicalResourceId'],
+                    resource_status_reason=stack_event['ResourceStatusReason']
+                )
             )
 
     print('Stack deletion complete')
-    return True
 
 if __name__ == "__main__":
-    if not cleanup_version_stack(
-        cluster_name=os.environ['ECS_CLUSTER_NAME'],
-        app_name=os.environ['ECS_APP_NAME'],
-        version=os.environ['BUILD_VERSION']):
-
-        sys.exit(1)
+    cleanup_version_stack(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'])

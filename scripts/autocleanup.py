@@ -2,29 +2,10 @@
 """CLI and function for autocleanup"""
 
 import os
-import boto3
 import datetime
+import boto3
 from cleanup import cleanup_version_stack
-from deploy import get_list_of_rules
-
-
-def get_alb_default_target_group(cluster_name, app_name):
-    """Return the Target Group for the default routing rule of an ALB"""
-
-    app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
-
-    alb_default_target_group = ""
-
-    rules = get_list_of_rules(app_stack_name)
-    for rule in rules:
-        if rule['IsDefault'] is True:
-            alb_default_target_group = rule['Actions'][0]['TargetGroupArn']
-            break
-
-    if alb_default_target_group == "":
-        raise Exception("Default action target group not found in ALB Listener")
-
-    return alb_default_target_group
+from cleanup import get_alb_default_target_group
 
 
 def list_stacks(cluster_name, app_name):
@@ -69,6 +50,8 @@ def list_stacks(cluster_name, app_name):
 
 
 def filter_old_stacks(stacks, age_seconds):
+    """Filter stacks older than N number of seconds"""
+
     filtered_stacks = []
 
     for stack in stacks:
@@ -79,6 +62,8 @@ def filter_old_stacks(stacks, age_seconds):
 
 
 def filter_not_cutover(stacks, cluster_name, app_name):
+    """Filter live stacks from the rest"""
+
     filtered_stacks = []
 
     alb_default_target_group = get_alb_default_target_group(cluster_name, app_name)
@@ -98,6 +83,8 @@ def filter_not_cutover(stacks, cluster_name, app_name):
 
 
 def filter_excludes(stacks, stack_excludes):
+    """Filter stacks excluded from cleanup"""
+
     filtered_stacks = []
 
     stack_excludes_list = [item.strip() for item in stack_excludes.split(',')]
@@ -105,8 +92,8 @@ def filter_excludes(stacks, stack_excludes):
     for stack in stacks:
         exclude = False
 
-        for stack_excludes in stack_excludes_list:
-            if stack['StackName'].startswith(stack_excludes):
+        for stack_exclude in stack_excludes_list:
+            if stack['StackName'].startswith(stack_exclude):
                 exclude = True
 
         if not exclude:
@@ -125,7 +112,7 @@ def get_stack_version(stack_name):
             return output['OutputValue']
 
 
-def get_stack_termination_protection(stack_name):
+def get_termination_protection(stack_name):
     """Return the state of termination protection for a given CloudFormation stack"""
 
     cloudformation = boto3.client('cloudformation')
@@ -133,17 +120,16 @@ def get_stack_termination_protection(stack_name):
     return response['Stacks'][0]['EnableTerminationProtection']
 
 
-if __name__ == "__main__":
+def main():
+    """Entrypoint for CLI"""
+
     stacks = list_stacks(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'])
 
-    # Filter live stacks from the rest
     stacks = filter_not_cutover(stacks=stacks, cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'])
 
-    # Filter stacks excluded from cleanup
     if 'ECS_AUTOCLEANUP_EXCLUDES' in os.environ:
         stacks = filter_excludes(stacks, os.environ['ECS_AUTOCLEANUP_EXCLUDES'])
 
-    # Filter stacks older than N number of seconds
     if 'ECS_AUTOCLEANUP_OLDER_THAN' in os.environ:
         stacks = filter_old_stacks(stacks, os.environ['ECS_AUTOCLEANUP_OLDER_THAN'])
 
@@ -155,7 +141,7 @@ if __name__ == "__main__":
             app_name=os.environ['ECS_APP_NAME'],
             version=version)
 
-        if get_stack_termination_protection(stack['StackName']):
+        if get_termination_protection(stack['StackName']):
             print("Skipping {stack_name}, Termination Protection Enabled".format(stack_name=stack_name))
             continue
 
@@ -166,3 +152,6 @@ if __name__ == "__main__":
         print("Cleaning up {stack_name}".format(stack_name=stack_name))
 
         cleanup_version_stack(cluster_name=os.environ['ECS_CLUSTER_NAME'], app_name=os.environ['ECS_APP_NAME'], version=version)
+
+if __name__ == "__main__":
+    main()
