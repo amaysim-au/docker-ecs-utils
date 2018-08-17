@@ -4,7 +4,7 @@ else
 	DOTENV_TARGET=.env
 endif
 
-VERSION = 2.8.0
+VERSION = 2.9.0
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
 TAG = $(VERSION)
 
@@ -27,6 +27,7 @@ shell: $(DOTENV_TARGET)
 lint: $(DOTENV_TARGET)
 	docker-compose run --rm flake8 --ignore 'E501' scripts/*.py
 	docker-compose run --rm pylint scripts/*.py
+	docker-compose run --rm cfn-python-lint cfn-lint -t scripts/ecs-cluster-application-version.yml
 
 test: $(DOTENV_TARGET)
 	docker-compose down

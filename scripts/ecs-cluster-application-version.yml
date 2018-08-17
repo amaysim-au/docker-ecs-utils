@@ -76,28 +76,16 @@ Parameters:
   AlbScheme:
     Description: Is the ALB internal or internet-facing?
     Type: String
-  LBType:
-    Description: Type of load balancer
-    Type: String
-    AllowedValues:
-      - None
-      - ALB
-      - NLB
 
 Conditions:
   isAutoscaling: !Equals [ !Ref Autoscaling, 'Enable']
   isInternal: !Equals
     - !Ref AlbScheme
     - 'internal'
-  isALB: !Equals [!Ref LBType, ALB]
-  isNLB: !Equals [!Ref LBType, NLB]
-  isNoLB: !Equals [!Ref LBType, None]
-  isLB: !Not ["Condition": isNoLB]
 
 Resources:
   ALBTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Condition: isALB
     Properties:
       HealthCheckIntervalSeconds: 10
       HealthCheckPath: !Ref HealthCheckPath
@@ -115,7 +103,6 @@ Resources:
 
   ListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Condition: isALB
     Properties:
       Actions:
         - Type: forward
@@ -129,10 +116,9 @@ Resources:
         Fn::ImportValue: !Sub "ecs-${ClusterName}-${Name}-${Environment}-ALBListenerSSL"
       Priority: !Ref RulePriority
 
-  ECSServiceLB:
+  ECSService:
     Type: AWS::ECS::Service
     DependsOn: ListenerRule  # The ECS Service will fail to deploy if the TG is not attached to a LB. This DependsOn fixes this.
-    Condition: isLB
     Properties:
       TaskDefinition: !Ref TaskDefinitionArn
       DesiredCount: 1
@@ -151,16 +137,6 @@ Resources:
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref ALBTargetGroup
 
-  # Because DependsOn can't be made conditional, we have to define ECSService twice - one for ALB and one without.
-  ECSServiceNoLB:
-    Type: AWS::ECS::Service
-    Condition: isNoLB
-    Properties:
-      TaskDefinition: !Ref TaskDefinitionArn
-      DesiredCount: 1
-      Cluster:
-        Fn::ImportValue: !Sub "ecs-${ClusterName}-ECSClusterArn"
-
   ServiceScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
     Condition: isAutoscaling
@@ -171,10 +147,7 @@ Resources:
         - "service/${ECSCluster}/${ServiceName}"
         - ECSCluster:
             "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSCluster"
-          ServiceName: !If
-            - isNoLB
-            - !GetAtt ECSServiceNoLB.Name
-            - !GetAtt ECSServiceLB.Name
+          ServiceName: !GetAtt ECSService.Name
       RoleARN:
         "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSAutoscalingRoleArn"
       ScalableDimension: ecs:service:DesiredCount
@@ -210,7 +183,6 @@ Resources:
 
 Outputs:
   Url:
-    Condition: isALB
     Value: !Sub "https://${Name}-${Version}.${Domain}${Path}"
     Description: URL for the version of this app
   Version:
