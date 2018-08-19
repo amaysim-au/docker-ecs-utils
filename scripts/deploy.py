@@ -126,36 +126,10 @@ def get_list_of_rules(app_stack_name):
     return response['Rules']
 
 
-def get_load_balancer_type(app_stack_name):
-    """Given an application stack, queries CloudFormation and returns the type of load balancer it was created with"""
+def upload_task_definition(task_definition):
+    """Interpolates some values and then uploads the task definition to ECS
 
-    cloudformation = boto3.client('cloudformation')
-    response = cloudformation.describe_stacks(
-        StackName=app_stack_name
-    )
-    try:
-        load_balancer_type = [parameter['ParameterValue'] for parameter in response['Stacks'][0]['Parameters'] if parameter['ParameterKey'] == "LBType"][0]
-    except (KeyError, IndexError):
-        print('Could not find LBType parameter in response: {}'.format(response))
-    return load_balancer_type
-
-
-def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_zone, base_path, config, task_definition, template):  # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements
-    """Core function for deploying an ECS Service"""
-
-    print("Beginning deployment of {}...".format(app_name))
-
-    version_stack_name = "ECS-{cluster_name}-App-{app_name}-{version}".format(
-        cluster_name=cluster_name,
-        app_name=app_name,
-        version=version
-    )
-    app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
-
-    load_balancer_type = get_load_balancer_type(app_stack_name)
-    print("Load balancer type is {}.".format(load_balancer_type))
-
-    print("Loading configuration files...")
+    Returns the task definition version ARN"""
 
     print("Generating environment variable configuration...")
     environment = generate_environment_object()
@@ -164,9 +138,62 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
     print("Task definition generated:")
     print(json.dumps(task_definition, indent=2, default=str))
 
+    print("Uploading Task Definition...")
+    ecs = boto3.client('ecs')
+    response = ecs.register_task_definition(**task_definition)
+    task_definition_arn = response['taskDefinition']['taskDefinitionArn']
+    print("Task Definition ARN: {}".format(task_definition_arn))
+    return task_definition_arn
+
+
+def get_parameters(config, version_stack_name, app_stack_name, task_definition, app_name, cluster_name, env, version, aws_hosted_zone, base_path, task_definition_arn):  # pylint: disable=too-many-arguments,too-many-locals
+    """Generates and returns necessary parameters for CloudFormation stack"""
+
     print("Generating Parmeters for CloudFormation template")
-    if load_balancer_type != "None":  # this is intentionally a string
-        container_port = [x['portMappings'][0]['containerPort'] for x in task_definition['containerDefinitions'] if x['name'] == app_name][0]
+    container_port = [x['portMappings'][0]['containerPort'] for x in task_definition['containerDefinitions'] if x['name'] == app_name][0]
+
+    cloudformation = boto3.client('cloudformation')
+    print("Determining ALB Rule priority...")
+    priority = None
+    listener_rule = None
+    try:
+        response = cloudformation.describe_stack_resources(
+            StackName=version_stack_name,
+            LogicalResourceId='ListenerRule'
+        )
+        listener_rule = response['StackResources'][0]['PhysicalResourceId']
+        print("Listener Rule already exists, not setting priority.")
+    except (KeyError, IndexError, botocore.exceptions.ClientError):
+        print("Listener Rule does not already exist, getting priority...")
+    if listener_rule is None:
+        rules = get_list_of_rules(app_stack_name)
+        priority = get_priority(rules)
+    print("Rule priority is {}.".format(priority))
+
+    print("Determining if ALB is internal or internet-facing...")
+    elbv2 = boto3.client('elbv2')
+    response = cloudformation.describe_stack_resources(
+        StackName=app_stack_name,
+        LogicalResourceId='ALB'
+    )
+    alb = response['StackResources'][0]['PhysicalResourceId']
+    response = elbv2.describe_load_balancers(
+        LoadBalancerArns=[alb],
+    )
+    alb_scheme = response['LoadBalancers'][0]['Scheme']
+    print("ALB is {}.".format(alb_scheme))
+
+    try:
+        autoscaling = str(config['autoscaling'])
+        autoscaling_target = str(config['autoscaling_target'])
+        autoscaling_max_size = str(config['autoscaling_max_size'])
+        autoscaling_min_size = str(config['autoscaling_min_size'])
+    except KeyError as exception:
+        print("Autoscaling parameter missing, disabling autoscaling ({})".format(exception))
+        autoscaling = None
+        autoscaling_target = None
+        autoscaling_max_size = None
+        autoscaling_min_size = None
 
     parameters = [
         {
@@ -186,153 +213,146 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
             "ParameterValue": version
         },
         {
-            "ParameterKey": 'LBType',
-            "ParameterValue": load_balancer_type
-        }
-    ]
-
-    if load_balancer_type != "None":  # this is intentionally a string
-        extra_parameters = [
-            {
-                "ParameterKey": 'HealthCheckPath',
-                "ParameterValue": config['lb_health_check']
-            },
-            {
-                "ParameterKey": 'HealthCheckGracePeriod',
-                "ParameterValue": str(config['lb_health_check_grace_period'])
-            },
-            {
-                "ParameterKey": 'ContainerPort',
-                "ParameterValue": str(container_port)
-            },
-            {
-                "ParameterKey": 'Domain',
-                "ParameterValue": aws_hosted_zone
-            },
-            {
-                "ParameterKey": 'Path',
-                "ParameterValue": base_path
-            }
-        ]
-        for extra_parameter in extra_parameters:
-            parameters.append(extra_parameter)
-    else:
-        extra_parameters = [
-            {
-                "ParameterKey": 'HealthCheckPath',
-                "ParameterValue": ""
-            },
-            {
-                "ParameterKey": 'ContainerPort',
-                "ParameterValue": ""
-            },
-            {
-                "ParameterKey": 'Domain',
-                "ParameterValue": ""
-            },
-            {
-                "ParameterKey": 'Path',
-                "ParameterValue": ""
-            },
-            {
-                "ParameterKey": 'RulePriority',
-                "ParameterValue": "-1"
-            },
-            {
-                "ParameterKey": 'AlbScheme',
-                "ParameterValue": ""
-            }
-        ]
-        for extra_parameter in extra_parameters:
-            parameters.append(extra_parameter)
-
-    print("Uploading Task Definition...")
-    ecs = boto3.client('ecs')
-    response = ecs.register_task_definition(**task_definition)
-    task_definition_arn = response['taskDefinition']['taskDefinitionArn']
-    print("Task Definition ARN: {}".format(task_definition_arn))
-
-    cloudformation = boto3.client('cloudformation')
-    if load_balancer_type != "None":
-        print("Determining ALB Rule priority...")
-        priority = None
-        listener_rule = None
-        try:
-            response = cloudformation.describe_stack_resources(
-                StackName=version_stack_name,
-                LogicalResourceId='ListenerRule'
-            )
-            listener_rule = response['StackResources'][0]['PhysicalResourceId']
-            print("Listener Rule already exists, not setting priority.")
-        except (KeyError, IndexError, botocore.exceptions.ClientError):
-            print("Listener Rule does not already exist, getting priority...")
-        if listener_rule is None:
-            rules = get_list_of_rules(app_stack_name)
-            priority = get_priority(rules)
-        print("Rule priority is {}.".format(priority))
-
-        print("Determining if ALB is internal or internet-facing...")
-        elbv2 = boto3.client('elbv2')
-        response = cloudformation.describe_stack_resources(
-            StackName=app_stack_name,
-            LogicalResourceId='ALB'
-        )
-        alb = response['StackResources'][0]['PhysicalResourceId']
-        response = elbv2.describe_load_balancers(
-            LoadBalancerArns=[alb],
-        )
-        alb_scheme = response['LoadBalancers'][0]['Scheme']
-        print("ALB is {}.".format(alb_scheme))
-
-    print("Appending additional parameters...")
-    parameters.append(
+            "ParameterKey": 'HealthCheckPath',
+            "ParameterValue": config['lb_health_check']
+        },
+        {
+            "ParameterKey": 'HealthCheckGracePeriod',
+            "ParameterValue": str(config['lb_health_check_grace_period'])
+        },
+        {
+            "ParameterKey": 'ContainerPort',
+            "ParameterValue": str(container_port)
+        },
+        {
+            "ParameterKey": 'Domain',
+            "ParameterValue": aws_hosted_zone
+        },
+        {
+            "ParameterKey": 'Path',
+            "ParameterValue": base_path
+        },
         {
             "ParameterKey": 'TaskDefinitionArn',
             "ParameterValue": task_definition_arn
-        }
-    )
-    if load_balancer_type != "None":
-        parameters.append(
-            {
-                "ParameterKey": 'AlbScheme',
-                "ParameterValue": alb_scheme
-            }
-        )
-        if priority is not None:
-            parameters.append({
-                "ParameterKey": 'RulePriority',
-                "ParameterValue": str(priority)
-            })
-        else:
-            parameters.append({
-                "ParameterKey": 'RulePriority',
-                "UsePreviousValue": True
-            })
-
-    if config.get('autoscaling') is not None:
-        parameters.append({
+        },
+        {
+            "ParameterKey": 'AlbScheme',
+            "ParameterValue": alb_scheme
+        },
+        {
             "ParameterKey": 'Autoscaling',
-            "ParameterValue": str(config['autoscaling'])
-        })
-    if config.get('autoscaling_target') is not None:
-        parameters.append({
+            "ParameterValue": autoscaling
+        },
+        {
             "ParameterKey": 'AutoscalingTargetValue',
-            "ParameterValue": str(config['autoscaling_target'])
-        })
-    if config.get('autoscaling_max_size') is not None:
-        parameters.append({
+            "ParameterValue": autoscaling_target
+        },
+        {
             "ParameterKey": 'AutoscalingMaxSize',
-            "ParameterValue": str(config['autoscaling_max_size'])
-        })
-    if config.get('autoscaling_min_size') is not None:
-        parameters.append({
+            "ParameterValue": autoscaling_max_size
+        },
+        {
             "ParameterKey": 'AutoscalingMinSize',
-            "ParameterValue": str(config['autoscaling_min_size'])
+            "ParameterValue": autoscaling_min_size
+        }
+    ]
+
+    parameters = [x for x in parameters if x['ParameterValue'] is not None]  # remove all keys that have a value of None
+
+    if priority is not None:
+        parameters.append({
+            "ParameterKey": 'RulePriority',
+            "ParameterValue": str(priority)
+        })
+    else:
+        parameters.append({
+            "ParameterKey": 'RulePriority',
+            "UsePreviousValue": True
         })
 
     print("Finished generating parameters:")
     for param in parameters:
         print("{:30}{}".format(param['ParameterKey'] + ':', param.get('ParameterValue', None)))
+    return parameters
+
+
+def check_deployment(version_stack_name, app_name):
+    """Poll deployment until it is succesful, raise exception if not"""
+
+    print("Polling Target Group ({}) until a successful state is reached...".format(version_stack_name))
+    elbv2 = boto3.client('elbv2')
+    waiter = elbv2.get_waiter('target_in_service')
+    cloudformation = boto3.client('cloudformation')
+    response = cloudformation.describe_stack_resources(
+        StackName=version_stack_name,
+        LogicalResourceId='ALBTargetGroup'
+    )
+    target_group = response['StackResources'][0]['PhysicalResourceId']
+    start_time = datetime.datetime.now()
+    try:
+        waiter.wait(TargetGroupArn=target_group)
+    except botocore.exceptions.WaiterError:
+        print('Health check did not pass!')
+        response = cloudformation.describe_stack_resources(
+            StackName=version_stack_name,
+            LogicalResourceId='ECSService'
+        )
+        service = response['StackResources'][0]['PhysicalResourceId']
+        print('Outputting events for service {}:'.format(service))
+        response = cloudformation.describe_stack_resources(
+            StackName="ECS-{}".format(app_name),
+            LogicalResourceId='ECSCluster'
+        )
+        cluster = response['StackResources'][0]['PhysicalResourceId']
+        ecs = boto3.client('ecs')
+        response = ecs.describe_services(
+            cluster=cluster,
+            services=[service]
+        )
+        for event in [x['message'] for x in response['services'][0]['events']]:
+            print(event)
+#            print('Deleting CloudFormation stack...')
+#            response = cloudformation.delete_stack(
+#                StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
+#            )
+#            waiter = cf.get_waiter('stack_delete_complete')
+#            waiter.wait(
+#                StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
+#            )
+#            print('CloudFormation stack deleted.')
+        elapsed_time = datetime.datetime.now() - start_time
+        print('Health check passed in {}'.format(elapsed_time))
+        print("Done.")
+
+
+def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_zone, base_path, config, task_definition, template):  # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements
+    """Core function for deploying an ECS Service"""
+
+    print("Beginning deployment of {}...".format(app_name))
+
+    version_stack_name = "ECS-{cluster_name}-App-{app_name}-{version}".format(
+        cluster_name=cluster_name,
+        app_name=app_name,
+        version=version
+    )
+    app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
+
+    task_definition_arn = upload_task_definition(task_definition)
+
+    parameters = get_parameters(
+        config=config,
+        version_stack_name=version_stack_name,
+        app_stack_name=app_stack_name,
+        task_definition=task_definition,
+        app_name=app_name,
+        cluster_name=cluster_name,
+        env=env,
+        version=version,
+        aws_hosted_zone=aws_hosted_zone,
+        base_path=base_path,
+        task_definition_arn=task_definition_arn
+    )
 
     tags = [
         {
@@ -359,6 +379,7 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
     elapsed_time = datetime.datetime.now() - start_time
     print("CloudFormation stack deploy completed in {}.".format(elapsed_time))
 
+    cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stacks(
         StackName=version_stack_name
     )
@@ -367,49 +388,7 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
     for output in outputs:
         print("{:30}{}".format(output['OutputKey'] + ':', output.get('OutputValue', None)))
 
-    if load_balancer_type != "None":
-        print("Polling Target Group ({}) until a successful state is reached...".format(version_stack_name))
-        elbv2 = boto3.client('elbv2')
-        waiter = elbv2.get_waiter('target_in_service')
-        response = cloudformation.describe_stack_resources(
-            StackName=version_stack_name,
-            LogicalResourceId='ALBTargetGroup'
-        )
-        target_group = response['StackResources'][0]['PhysicalResourceId']
-        start_time = datetime.datetime.now()
-        try:
-            waiter.wait(TargetGroupArn=target_group)
-        except botocore.exceptions.WaiterError:
-            print('Health check did not pass!')
-            response = cloudformation.describe_stack_resources(
-                StackName=version_stack_name,
-                LogicalResourceId='ECSService'
-            )
-            service = response['StackResources'][0]['PhysicalResourceId']
-            print('Outputting events for service {}:'.format(service))
-            response = cloudformation.describe_stack_resources(
-                StackName="ECS-{}".format(app_name),
-                LogicalResourceId='ECSCluster'
-            )
-            cluster = response['StackResources'][0]['PhysicalResourceId']
-            response = ecs.describe_services(
-                cluster=cluster,
-                services=[service]
-            )
-            for event in [x['message'] for x in response['services'][0]['events']]:
-                print(event)
-#            print('Deleting CloudFormation stack...')
-#            response = cloudformation.delete_stack(
-#                StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
-#            )
-#            waiter = cf.get_waiter('stack_delete_complete')
-#            waiter.wait(
-#                StackName="MV-{realm}-{app_name}-{version}-{env}".format(env=os.environ['ENV'], app_name=os.environ['ECS_APP_NAME'], version=os.environ['BUILD_VERSION'], realm=os.environ['REALM'])
-#            )
-#            print('CloudFormation stack deleted.')
-        elapsed_time = datetime.datetime.now() - start_time
-        print('Health check passed in {}'.format(elapsed_time))
-        print("Done.")
+    check_deployment(version_stack_name, app_name)
 
 
 def main():

@@ -105,7 +105,7 @@ def set_correct_service_size(cluster_name, app_name, version_stack_name, target_
     cloudformation = boto3.client('cloudformation')
     response = cloudformation.describe_stack_resources(
         StackName=version_stack_name,
-        LogicalResourceId='ECSServiceLB'
+        LogicalResourceId='ECSService'
     )
     service_full_name = response['StackResources'][0]['PhysicalResourceId'].split('/')[-1]
 
@@ -130,7 +130,7 @@ def wait_for_target_group_size(desired_count, target_group):
     """Waits until a target group has a given number of healthy targets"""
 
     targets = 0
-    timeout = 120
+    timeout =  600
     backoff = 0
     start_time = datetime.datetime.now()
     elapsed_time = elapsed_time = datetime.datetime.now() - start_time
