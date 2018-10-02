@@ -9,6 +9,6 @@ RUN apk add --no-cache gettext ca-certificates make bash && \
 
 WORKDIR /srv/app
 
-ADD scripts /scripts
+COPY scripts /scripts
 
 CMD ["python3", "--version"]
