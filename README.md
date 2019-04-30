@@ -58,3 +58,15 @@ cookiecutter https://github.com/amaysim-au/docker-ecs-utils
 ```
 
 You can find an example of a generated project in [example/](example).
+
+## Updating ecs-utils image
+
+This project is auto-deployed to [Docker Hub](https://cloud.docker.com/u/amaysim/repository/docker/amaysim/ecs-utils) upon GitHub Master/Tag changes.
+
+### latest
+
+Before committing anything to master, make sure everything works locally: `$ make dockerBuild lint test`. Once a commit is done to master, Docker Hub builds it and tags the image to `latest`.
+
+### Semantic version
+
+Once you are happy with your changes, it is time to version the image. First, make sure your Makefile VERSION is updated and committed to master. Lastly, run `$ make gitTag` which sets a tag in GitHub and triggers Docker Hub.
