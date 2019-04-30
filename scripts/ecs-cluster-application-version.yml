@@ -33,6 +33,14 @@ Parameters:
     Description: The period of time, in seconds, that the Amazon ECS service scheduler ignores unhealthy Elastic Load Balancing target health checks after a task has first started.
     Type: Number
     Default: 60
+  HealthCheckTimeout:
+    Description: The amount of time, in seconds, during which no response means a failed health check (2-120 seconds).
+    Type: Number
+    Default: 5
+  HealthCheckInterval:
+    Description: The approximate amount of time between health checks of an individual target (5-300 seconds).
+    Type: Number
+    Default: 10
   TaskDefinitionArn:
     Description: ARN of Task Definition revision to Deploy to this service
     Type: String
@@ -87,10 +95,10 @@ Resources:
   ALBTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HealthCheckIntervalSeconds: 10
+      HealthCheckIntervalSeconds: !Ref HealthCheckInterval
       HealthCheckPath: !Ref HealthCheckPath
       HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
+      HealthCheckTimeoutSeconds: !Ref HealthCheckTimeout
       HealthyThresholdCount: 2
       Port: 80
       Protocol: HTTP

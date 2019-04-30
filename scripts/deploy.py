@@ -221,6 +221,14 @@ def get_parameters(config, version_stack_name, app_stack_name, task_definition, 
             "ParameterValue": str(config['lb_health_check_grace_period'])
         },
         {
+            "ParameterKey": 'HealthCheckTimeout',
+            "ParameterValue": str(config['lb_health_check_timeout'])
+        },
+        {
+            "ParameterKey": 'HealthCheckInterval',
+            "ParameterValue": str(config['lb_health_check_interval'])
+        },
+        {
             "ParameterKey": 'ContainerPort',
             "ParameterValue": str(container_port)
         },
