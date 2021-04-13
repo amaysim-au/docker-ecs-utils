@@ -129,19 +129,20 @@ def update_container_definitions_with_env_vars(task_definition):
     environment = generate_environment_object()
     if not environment:
         return task_definition
-    for index, container_definition in enumerate(task_definition['containerDefinitions']):  # pylint: disable=unused-variable
+    for container_definition in task_definition['containerDefinitions']:
         if not 'environment' in container_definition:
             container_definition['environment'] = environment
             continue
-        for index_environment, value_environment in enumerate(environment):
-            updated = False
-            for index_container_environment, value_container_environment in enumerate(container_definition['environment']):
-                if value_environment['name'] == value_container_environment['name']:
-                    value_container_environment['value'] = value_environment['value']
-                    updated = True
-                    break
-            if not updated:
-                container_definition['environment'].append(value_environment)
+
+        for env_name_value in environment:
+            env_found_in_definition = False
+            for container_env_name_value in container_definition['environment']:
+                if container_env_name_value['name'] == env_name_value['name']:
+                    container_env_name_value['value'] = env_name_value['value']
+                    env_found_in_definition = True
+
+            if not env_found_in_definition:
+                container_definition['environment'].append(env_name_value)
     return task_definition
 
 def upload_task_definition(task_definition):
