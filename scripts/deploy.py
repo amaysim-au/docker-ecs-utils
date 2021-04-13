@@ -134,7 +134,10 @@ def upload_task_definition(task_definition):
     print("Generating environment variable configuration...")
     environment = generate_environment_object()
     for index, value in enumerate(task_definition['containerDefinitions']):  # pylint: disable=unused-variable
-        task_definition['containerDefinitions'][index]['environment'] = environment
+        if not 'environment' in task_definition['containerDefinitions'][index]:
+            task_definition['containerDefinitions'][index]['environment'] = {}
+        task_definition['containerDefinitions'][index]['environment'].update(environment)
+
     print("Task definition generated:")
     print(json.dumps(task_definition, indent=2, default=str))
 
