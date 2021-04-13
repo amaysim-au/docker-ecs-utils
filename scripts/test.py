@@ -101,6 +101,55 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
         environment = deploy.generate_environment_object()
         self.assertEqual(environment, expected_environment)
 
+class UpdateContainerDefinitionsWithEnvVarsTest(unittest.TestCase):
+    """Unit tests for deploy.update_container_definitions_with_env_vars(task_definition)"""
+
+    @patch('builtins.open', unittest.mock.mock_open(read_data='ENV\nCLOUD'))
+    @patch.dict('os.environ', {'ENV': 'Dev', 'CLOUD': 'AWS'})
+    def test_1(self):
+        """Test with no container environment configured"""
+        # Given
+        task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}}}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
+        # When
+        result = deploy.update_container_definitions_with_env_vars(task_definition)
+        # Then
+        expected_task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"}, {"name":"CLOUD","value":"AWS"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
+        self.assertEqual(result, expected_task_definition)
+
+    @patch('builtins.open', unittest.mock.mock_open(read_data='ENV\nCLOUD'))
+    @patch.dict('os.environ', {'ENV': 'Dev', 'CLOUD': 'AWS'})
+    def test_2(self):
+        """Test with container environment configured"""
+        # Given
+        task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"QA"},{"name":"PATH","value":"apath"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
+        # When
+        result = deploy.update_container_definitions_with_env_vars(task_definition)
+        # Then
+        expected_task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"},{"name":"PATH","value":"apath"},{"name":"CLOUD","value":"AWS"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
+        self.assertEqual(result, expected_task_definition)
+
+    @patch('builtins.open', unittest.mock.mock_open(read_data=''))
+    def test_3(self):
+        """Test with no env vars"""
+        # Given
+        task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}}}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
+        # When
+        result = deploy.update_container_definitions_with_env_vars(task_definition)
+        # Then
+        expected_task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}}}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
+        self.assertEqual(result, expected_task_definition)
+
+    @patch('builtins.open', unittest.mock.mock_open(read_data='ENV\nCLOUD'))
+    @patch.dict('os.environ', {'ENV': 'Dev', 'CLOUD': 'AWS'})
+    def test_4(self):
+        """Test with multiple container definitions"""
+        # Given
+        task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"}]},{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"QA"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
+        # When
+        result = deploy.update_container_definitions_with_env_vars(task_definition)
+        # Then
+        expected_task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"},{"name":"CLOUD","value":"AWS"}]},{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"},{"name":"CLOUD","value":"AWS"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
+        self.assertEqual(result, expected_task_definition)
 
 def main():
     """Entrypoint for CLI"""
