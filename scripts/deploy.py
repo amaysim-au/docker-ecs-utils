@@ -125,20 +125,30 @@ def get_list_of_rules(app_stack_name):
     response = client.describe_rules(ListenerArn=alb_listener)
     return response['Rules']
 
+def update_container_definitions_with_env_vars(task_definition):
+    environment = generate_environment_object()
+    if not environment:
+        return task_definition
+    for index, container_definition in enumerate(task_definition['containerDefinitions']):  # pylint: disable=unused-variable
+        if not 'environment' in container_definition:
+            container_definition['environment'] = []
+        for index_environment, value_environment in enumerate(environment):
+            updated = False
+            for index_container_environment, value_container_environment in enumerate(container_definition['environment']):
+                if value_environment['name'] == value_container_environment['name']:
+                    value_container_environment['value'] = value_environment['value']
+                    updated = True
+                    break
+            if not updated:
+                container_definition['environment'].append(value_environment)
+    return task_definition
 
 def upload_task_definition(task_definition):
     """Interpolates some values and then uploads the task definition to ECS
 
     Returns the task definition version ARN"""
 
-    print("Generating environment variable configuration...")
-    environment = generate_environment_object()
-    for index, value in enumerate(task_definition['containerDefinitions']):  # pylint: disable=unused-variable
-        if not 'environment' in task_definition['containerDefinitions'][index]:
-            task_definition['containerDefinitions'][index]['environment'] = {}
-        task_definition['containerDefinitions'][index]['environment'].update(environment)
-
-    print("Task definition generated:")
+    print("Task definition to be uploaded:")
     print(json.dumps(task_definition, indent=2, default=str))
 
     print("Uploading Task Definition...")
@@ -349,6 +359,7 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
     )
     app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
 
+    task_definition = update_container_definitions_with_env_vars(task_definition)
     task_definition_arn = upload_task_definition(task_definition)
 
     parameters = get_parameters(
