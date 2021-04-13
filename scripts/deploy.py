@@ -131,7 +131,8 @@ def update_container_definitions_with_env_vars(task_definition):
         return task_definition
     for index, container_definition in enumerate(task_definition['containerDefinitions']):  # pylint: disable=unused-variable
         if not 'environment' in container_definition:
-            container_definition['environment'] = []
+            container_definition['environment'] = environment
+            continue
         for index_environment, value_environment in enumerate(environment):
             updated = False
             for index_container_environment, value_container_environment in enumerate(container_definition['environment']):
