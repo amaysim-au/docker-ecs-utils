@@ -101,7 +101,7 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
         environment = deploy.generate_environment_object()
         self.assertEqual(environment, expected_environment)
 
-class MergeTaskDefinitionWithEnvVarsTest(unittest.TestCase):
+class UpdateContainerDefinitionsWithEnvVarsTest(unittest.TestCase):
     """Unit tests for deploy.update_container_definitions_with_env_vars(task_definition)"""
 
     @patch('builtins.open', unittest.mock.mock_open(read_data='ENV\nCLOUD'))
