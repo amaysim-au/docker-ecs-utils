@@ -126,7 +126,7 @@ def get_list_of_rules(app_stack_name):
     return response['Rules']
 
 
-def update_container_defs_with_env(task_definition):
+def _update_container_defs_with_env(task_definition):
     """merge each container definition with environment variables"""
 
     environment = generate_environment_object()
@@ -365,7 +365,7 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
     )
     app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
 
-    task_definition = update_container_defs_with_env(task_definition)
+    task_definition = _update_container_defs_with_env(task_definition)
     task_definition_arn = upload_task_definition(task_definition)
 
     parameters = get_parameters(

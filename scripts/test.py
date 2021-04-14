@@ -103,7 +103,7 @@ class GenerateEnvironmentObjectTest(unittest.TestCase):
 
 
 class UpdateContainerDefinitionsWithEnvVarsTest(unittest.TestCase):
-    """Unit tests for deploy.update_container_defs_with_env(task_definition)"""
+    """Unit tests for deploy._update_container_defs_with_env(task_definition)"""
 
     @patch('builtins.open', unittest.mock.mock_open(read_data='ENV\nCLOUD'))
     @patch.dict('os.environ', {'ENV': 'Dev', 'CLOUD': 'AWS'})
@@ -112,7 +112,7 @@ class UpdateContainerDefinitionsWithEnvVarsTest(unittest.TestCase):
         # Given
         task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}}}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
         # When
-        result = deploy.update_container_defs_with_env(task_definition)
+        result = deploy._update_container_defs_with_env(task_definition)  # pylint: disable=protected-access
         # Then
         expected_task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"}, {"name":"CLOUD","value":"AWS"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
         self.assertEqual(result, expected_task_definition)
@@ -124,7 +124,7 @@ class UpdateContainerDefinitionsWithEnvVarsTest(unittest.TestCase):
         # Given
         task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"QA"},{"name":"PATH","value":"apath"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
         # When
-        result = deploy.update_container_defs_with_env(task_definition)
+        result = deploy._update_container_defs_with_env(task_definition)  # pylint: disable=protected-access
         # Then
         expected_task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"},{"name":"PATH","value":"apath"},{"name":"CLOUD","value":"AWS"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
         self.assertEqual(result, expected_task_definition)
@@ -135,7 +135,7 @@ class UpdateContainerDefinitionsWithEnvVarsTest(unittest.TestCase):
         # Given
         task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}}}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
         # When
-        result = deploy.update_container_defs_with_env(task_definition)
+        result = deploy._update_container_defs_with_env(task_definition)  # pylint: disable=protected-access
         # Then
         expected_task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}}}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
         self.assertEqual(result, expected_task_definition)
@@ -147,7 +147,7 @@ class UpdateContainerDefinitionsWithEnvVarsTest(unittest.TestCase):
         # Given
         task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"}]},{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"QA"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
         # When
-        result = deploy.update_container_defs_with_env(task_definition)
+        result = deploy._update_container_defs_with_env(task_definition)  # pylint: disable=protected-access
         # Then
         expected_task_definition = json.loads('{"containerDefinitions":[{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"},{"name":"CLOUD","value":"AWS"}]},{"essential":true,"image":"an/image","name":"aname","linuxParameters":{"initProcessEnabled":true},"portMappings":[{"containerPort":1234}],"logConfiguration":{"logDriver":"awslogs","options":{"awslogs-group":"group","awslogs-region":"aregion"}},"environment":[{"name":"ENV","value":"Dev"},{"name":"CLOUD","value":"AWS"}]}],"family":"afamilly","volumes":[],"memory":"128","cpu":"128"}')
         self.assertEqual(result, expected_task_definition)
