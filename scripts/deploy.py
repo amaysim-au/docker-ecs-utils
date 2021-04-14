@@ -125,12 +125,15 @@ def get_list_of_rules(app_stack_name):
     response = client.describe_rules(ListenerArn=alb_listener)
     return response['Rules']
 
-def update_container_definitions_with_env_vars(task_definition):
+
+def update_container_defs_with_env(task_definition):
+    """merge each container definition with environment variables"""
+
     environment = generate_environment_object()
     if not environment:
         return task_definition
     for container_definition in task_definition['containerDefinitions']:
-        if not 'environment' in container_definition:
+        if 'environment' not in container_definition:
             container_definition['environment'] = environment
             continue
 
@@ -144,6 +147,7 @@ def update_container_definitions_with_env_vars(task_definition):
             if not env_found_in_definition:
                 container_definition['environment'].append(env_name_value)
     return task_definition
+
 
 def upload_task_definition(task_definition):
     """Interpolates some values and then uploads the task definition to ECS
@@ -361,7 +365,7 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
     )
     app_stack_name = "ECS-{cluster}-App-{app}".format(cluster=cluster_name, app=app_name)
 
-    task_definition = update_container_definitions_with_env_vars(task_definition)
+    task_definition = update_container_defs_with_env(task_definition)
     task_definition_arn = upload_task_definition(task_definition)
 
     parameters = get_parameters(
