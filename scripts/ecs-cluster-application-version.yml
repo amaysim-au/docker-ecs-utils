@@ -84,6 +84,21 @@ Parameters:
   AlbScheme:
     Description: Is the ALB internal or internet-facing?
     Type: String
+  ECSServicePropagateTags:
+    Description: Specifies whether to propagate the tags from the task definition or the service to the tasks in the service.
+    Type: String
+    AllowedValues:
+      - SERVICE
+      - TASK_DEFINITION
+    Default: SERVICE
+  TagECSServiceName:
+    Type: String
+  TagECSServiceSecurityClassification:
+    Type: String
+  TagECSServiceSecurityDataType:
+    Type: String
+  TagECSServiceSecurityAccessibility:
+    Type: String
 
 Conditions:
   isAutoscaling: !Equals [ !Ref Autoscaling, 'Enable']
@@ -144,6 +159,16 @@ Resources:
         - ContainerName: !Sub "${Name}"
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref ALBTargetGroup
+      PropagateTags: !Ref ECSServicePropagateTags
+      Tags:
+        - Key: name
+          Value: !Ref TagECSServiceName
+        - Key: security:classification
+          Value: !Ref TagECSServiceSecurityClassification
+        - Key: security:data-type
+          Value: !Ref TagECSServiceSecurityDataType
+        - Key: security:accessibility
+          Value: !Ref TagECSServiceSecurityAccessibility
 
   ServiceScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
@@ -160,6 +185,7 @@ Resources:
         "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSAutoscalingRoleArn"
       ScalableDimension: ecs:service:DesiredCount
       ServiceNamespace: ecs
+
   ServiceScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
     Condition: isAutoscaling

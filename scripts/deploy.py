@@ -282,6 +282,22 @@ def get_parameters(config, version_stack_name, app_stack_name, task_definition, 
         {
             "ParameterKey": 'AutoscalingMinSize',
             "ParameterValue": autoscaling_min_size
+        },
+        {
+            "ParameterKey": 'TagECSServiceName',
+            "ParameterValue": service_name
+        },
+        {
+            "ParameterKey": 'TagECSServiceSecurityClassification',
+            "ParameterValue": security_classification
+        },
+        {
+            "ParameterKey": 'TagECSServiceSecurityDataType',
+            "ParameterValue": security_data_type
+        },
+        {
+            "ParameterKey": 'TagECSServiceSecurityAccessibility',
+            "ParameterValue": security_accessibility
         }
     ]
 
@@ -384,19 +400,39 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
 
     tags = [
         {
-            'Key': 'Platform',
-            'Value': app_name
+            'Key': 'application:project',
+            'Value': os.environ['APPLICATION_PROJECT']
         },
         {
-            'Key': 'Environment',
+            'Key': 'application:environment'
             'Value': env
         },
         {
-            'Key': 'Realm',
-            'Value': realm
+            'Key': 'application:category',
+            'Value': os.environ['APPLICATION_CATEGORY']
         },
         {
-            'Key': 'Version',
+            'Key': 'client:department',
+            'Value': os.environ['CLIENT_DEPARTMENT']
+        },
+        {
+            'Key': 'stack:name',
+            'Value': app_stack_name
+        },
+        {
+            'Key': 'stack:repository',
+            'Value': os.environ['STACK_REPOSITORY']
+        },
+        {
+            'Key': 'owner:name',
+            'Value': os.environ['OWNER_NAME']
+        },
+        {
+            'Key': 'application:id',
+            'Value': os.environ['APPLICATION_ID']
+        },
+        {
+            'Key': 'build:version',
             'Value': version
         }
     ]
