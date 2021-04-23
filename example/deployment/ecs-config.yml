@@ -17,7 +17,7 @@ security_accessibility: ""
 
 stack_tags:
   - Key: stack:name
-    Value: ECS-${ECS_CLUSTER_NAME}-App-${ECS_APP_NAME}
+    Value: ECS-${ECS_CLUSTER_NAME}-App-${ECS_APP_NAME}-${BUILD_VERSION}
   - Key: stack:repository
     Value: docker-ecs-utils
   - Key: application:id
