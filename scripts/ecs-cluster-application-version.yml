@@ -90,13 +90,6 @@ Parameters:
   AlbScheme:
     Description: Is the ALB internal or internet-facing?
     Type: String
-  ECSServicePropagateTags:
-    Description: Specifies whether to propagate the tags from the task definition or the service to the tasks in the service.
-    Type: String
-    AllowedValues:
-      - SERVICE
-      - TASK_DEFINITION
-    Default: SERVICE
   TagECSServiceName:
     Type: String
   TagECSServiceSecurityClassification:
@@ -165,9 +158,9 @@ Resources:
         - ContainerName: !Sub "${Name}"
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref ALBTargetGroup
-      PropagateTags: !Ref ECSServicePropagateTags
+      PropagateTags: SERVICE
       Tags:
-        - Key: name
+        - Key: resource:name
           Value: !Ref TagECSServiceName
         - Key: security:classification
           Value: !Ref TagECSServiceSecurityClassification
