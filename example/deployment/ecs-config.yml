@@ -10,7 +10,7 @@ autoscaling_target: 60
 autoscaling_min_size: 3
 autoscaling_max_size: 20
 
-service_name: ""
+service_resource_name: ""
 security_classification: ""
 security_data_type: ""
 security_accessibility: ""
@@ -34,4 +34,3 @@ stack_tags:
     Value: ${CLIENT_DEPARTMENT}
   - Key: owner:name
     Value: ${OWNER_NAME}
-

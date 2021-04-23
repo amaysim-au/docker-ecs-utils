@@ -285,7 +285,7 @@ def get_parameters(config, version_stack_name, app_stack_name, task_definition, 
         },
         {
             "ParameterKey": 'TagECSServiceName',
-            "ParameterValue": str(config['service_name'])
+            "ParameterValue": str(config['service_resource_name'])
         },
         {
             "ParameterKey": 'TagECSServiceSecurityClassification',
