@@ -9,3 +9,30 @@ autoscaling: Enable
 autoscaling_target: 60
 autoscaling_min_size: 3
 autoscaling_max_size: 20
+
+service_name: ""
+security_classification: ""
+security_data_type: ""
+security_accessibility: ""
+
+stack_tags:
+  - Key: stack:name
+    Value: ECS-${ECS_CLUSTER_NAME}-App-${ECS_APP_NAME}
+  - Key: stack:repository
+    Value: docker-ecs-utils
+  - Key: application:id
+    Value: ${APPLICATION_ID}
+  - Key: application:project
+    Value: ${APPLICATION_PROJECT}
+  - Key: application:environment
+    Value: ${ENV}
+  - Key: application:category
+    Value: ${APPLICATION_CATEGORY}
+  - Key: build:version
+    Value: ${BUILD_VERSION}
+  - Key: client:department
+    Value: ${CLIENT_DEPARTMENT}
+  - Key: owner:name
+    Value: ${OWNER_NAME}
+
+
