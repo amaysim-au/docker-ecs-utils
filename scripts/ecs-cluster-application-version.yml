@@ -2,6 +2,12 @@ AWSTemplateFormatVersion: '2010-09-09'
 
 Description: ECS Cluster Application Version
 
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - E3002
+
 Parameters:
   Name:
     Type: String
