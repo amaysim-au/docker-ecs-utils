@@ -4,7 +4,7 @@ else
 	DOTENV_TARGET=.env
 endif
 
-VERSION ?= 2.11.0
+VERSION ?= 3.0.0
 IMAGE_NAME ?= amaysim/ecs-utils:$(VERSION)
 TAG = $(VERSION)
 
@@ -34,8 +34,6 @@ test: $(DOTENV_TARGET)
 	docker-compose run --rm ecs scripts/test.py
 
 gitTag:
-	-git tag -d $(TAG)
-	-git push origin :refs/tags/$(TAG)
 	git tag $(TAG)
 	git push origin $(TAG)
 
