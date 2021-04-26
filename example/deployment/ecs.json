@@ -1,29 +1,71 @@
 {
-    "containerDefinitions": [
-        {
-            "essential": true,
-            "image": "123456789987.dkr.ecr.ap-southeast-2.amazonaws.com/devops/ok:${BUILD_VERSION}",
-            "name": "${ECS_APP_NAME}",
-            "linuxParameters": {
-                "initProcessEnabled": true
-            },
-            "portMappings": [
-                {
-                    "containerPort": 8888
-                }
-            ],
-            "logConfiguration": {
-                "logDriver": "awslogs",
-                "options": {
-                    "awslogs-group": "ecs-${ECS_APP_NAME}-${ENV}",
-                    "awslogs-region": "ap-southeast-2",
-                    "awslogs-stream-prefix": "${BUILD_VERSION}"
-                }
-            }
+  "containerDefinitions": [
+    {
+      "essential": true,
+      "image": "123456789987.dkr.ecr.ap-southeast-2.amazonaws.com/devops/ok:${BUILD_VERSION}",
+      "linuxParameters": {
+        "initProcessEnabled": true
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "ecs-${ECS_APP_NAME}-${ENV}",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "${BUILD_VERSION}"
         }
-    ],
-    "family": "${ECS_APP_NAME}-${ENV}",
-    "volumes": [],
-    "memory": "128",
-    "cpu": "128"
+      },
+      "name": "${ECS_APP_NAME}",
+      "portMappings": [
+        {
+          "containerPort": 8888
+        }
+      ]
+    }
+  ],
+  "cpu": "128",
+  "family": "${ECS_APP_NAME}-${ENV}",
+  "memory": "128",
+  "volumes": [],
+  "tags": [
+    {
+      "key": "stack:name",
+      "value": "ECS-${ECS_CLUSTER_NAME}-App-${ECS_APP_NAME}-${BUILD_VERSION}"
+    },
+    {
+      "key": "stack:repository",
+      "value": "docker-ecs-utils"
+    },
+    {
+      "key": "application:id",
+      "value": "${APPLICATION_ID}"
+    },
+    {
+      "key": "application:project",
+      "value": "${APPLICATION_PROJECT}"
+    },
+    {
+      "key": "application:environment",
+      "value": "${ENV}"
+    },
+    {
+      "key": "application:category",
+      "value": "${APPLICATION_CATEGORY}"
+    },
+    {
+      "key": "client:department",
+      "value": "${CLIENT_DEPARTMENT}"
+    },
+    {
+      "key": "owner:name",
+      "value": "${OWNER_NAME}"
+    },
+    {
+      "key": "owner:department",
+      "value": "${OWNER_DEPARTMENT}"
+    },
+    {
+      "key": "resource:name",
+      "value": "${ECS_APP_NAME}-${ENV}"
+    }
+  ]
 }

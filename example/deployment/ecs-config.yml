@@ -11,9 +11,9 @@ autoscaling_min_size: 3
 autoscaling_max_size: 20
 
 service_resource_name: ECS-${ENV}-App-${ECS_APP_NAME}-${BUILD_VERSION}-ECSService
-security_classification: ""
-security_data_type: ""
-security_accessibility: ""
+security_classification: ${SECURITY_CLASSIFICATION)
+security_data_type: ${SECURITY_DATA_TYPE}
+security_accessibility: ${SECURITY_ACCESSIBILITY}
 
 stack_tags:
   - Key: stack:name
