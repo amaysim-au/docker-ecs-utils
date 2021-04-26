@@ -29,7 +29,7 @@
   "tags": [
     {
       "key": "application:repository",
-      "value": "your-application-code-repository"
+      "value": "${APPLICATION_REPOSITORY}"
     },
     {
       "key": "application:id",
