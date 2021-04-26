@@ -28,12 +28,8 @@
   "cpu": "128",
   "tags": [
     {
-      "key": "stack:name",
-      "value": "ECS-${ECS_CLUSTER_NAME}-App-${ECS_APP_NAME}-${BUILD_VERSION}"
-    },
-    {
-      "key": "stack:repository",
-      "value": "docker-ecs-utils"
+      "key": "application:repository",
+      "value": "your-application-code-repository"
     },
     {
       "key": "application:id",
