@@ -284,19 +284,19 @@ def get_parameters(config, version_stack_name, app_stack_name, task_definition, 
             "ParameterValue": autoscaling_min_size
         },
         {
-            "ParameterKey": 'TagECSServiceName',
-            "ParameterValue": str(config['service_resource_name'])
+            "ParameterKey": 'ECSServiceName',
+            "ParameterValue": "{}-ECSService".format(version_stack_name)
         },
         {
-            "ParameterKey": 'TagECSServiceSecurityClassification',
+            "ParameterKey": 'ECSServiceSecurityClassification',
             "ParameterValue": str(config['security_classification'])
         },
         {
-            "ParameterKey": 'TagECSServiceSecurityDataType',
+            "ParameterKey": 'ECSServiceSecurityDataType',
             "ParameterValue": str(config['security_data_type'])
         },
         {
-            "ParameterKey": 'TagECSServiceSecurityAccessibility',
+            "ParameterKey": 'ECSServiceSecurityAccessibility',
             "ParameterValue": str(config['security_accessibility'])
         }
     ]

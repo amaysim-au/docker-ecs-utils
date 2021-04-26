@@ -90,13 +90,13 @@ Parameters:
   AlbScheme:
     Description: Is the ALB internal or internet-facing?
     Type: String
-  TagECSServiceName:
+  ECSServiceName:
     Type: String
-  TagECSServiceSecurityClassification:
+  ECSServiceSecurityClassification:
     Type: String
-  TagECSServiceSecurityDataType:
+  ECSServiceSecurityDataType:
     Type: String
-  TagECSServiceSecurityAccessibility:
+  ECSServiceSecurityAccessibility:
     Type: String
 
 Conditions:
@@ -161,13 +161,13 @@ Resources:
       PropagateTags: SERVICE
       Tags:
         - Key: resource:name
-          Value: !Ref TagECSServiceName
+          Value: !Ref ECSServiceName
         - Key: security:classification
-          Value: !Ref TagECSServiceSecurityClassification
+          Value: !Ref ECSServiceSecurityClassification
         - Key: security:data-type
-          Value: !Ref TagECSServiceSecurityDataType
+          Value: !Ref ECSServiceSecurityDataType
         - Key: security:accessibility
-          Value: !Ref TagECSServiceSecurityAccessibility
+          Value: !Ref ECSServiceSecurityAccessibility
 
   ServiceScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
