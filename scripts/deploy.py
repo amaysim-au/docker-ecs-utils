@@ -282,6 +282,22 @@ def get_parameters(config, version_stack_name, app_stack_name, task_definition, 
         {
             "ParameterKey": 'AutoscalingMinSize',
             "ParameterValue": autoscaling_min_size
+        },
+        {
+            "ParameterKey": 'ECSServiceName',
+            "ParameterValue": "{}-ECSService".format(version_stack_name)
+        },
+        {
+            "ParameterKey": 'ECSServiceSecurityClassification',
+            "ParameterValue": str(config['security_classification'])
+        },
+        {
+            "ParameterKey": 'ECSServiceSecurityDataType',
+            "ParameterValue": str(config['security_data_type'])
+        },
+        {
+            "ParameterKey": 'ECSServiceSecurityAccessibility',
+            "ParameterValue": str(config['security_accessibility'])
         }
     ]
 
@@ -353,7 +369,7 @@ def check_deployment(version_stack_name, app_name):
         print("Done.")
 
 
-def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_zone, base_path, config, task_definition, template):  # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements
+def deploy_ecs_service(app_name, env, cluster_name, version, aws_hosted_zone, base_path, config, task_definition, template):  # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements
     """Core function for deploying an ECS Service"""
 
     print("Beginning deployment of {}...".format(app_name))
@@ -382,28 +398,9 @@ def deploy_ecs_service(app_name, env, realm, cluster_name, version, aws_hosted_z
         task_definition_arn=task_definition_arn
     )
 
-    tags = [
-        {
-            'Key': 'Platform',
-            'Value': app_name
-        },
-        {
-            'Key': 'Environment',
-            'Value': env
-        },
-        {
-            'Key': 'Realm',
-            'Value': realm
-        },
-        {
-            'Key': 'Version',
-            'Value': version
-        }
-    ]
-
     print("Deploying CloudFormation stack: {}".format(version_stack_name))
     start_time = datetime.datetime.now()
-    response = create_or_update_stack(version_stack_name, template, parameters, tags)
+    response = create_or_update_stack(version_stack_name, template, parameters, config['stack_tags'])
     elapsed_time = datetime.datetime.now() - start_time
     print("CloudFormation stack deploy completed in {}.".format(elapsed_time))
 
@@ -425,7 +422,6 @@ def main():
     template_path = os.environ.get('ECS_APP_VERSION_TEMPLATE_PATH', '/scripts/ecs-cluster-application-version.yml')
     app_name = os.environ['ECS_APP_NAME']
     env = os.environ['ENV']
-    realm = os.environ['ENV']
     cluster_name = os.environ['ECS_CLUSTER_NAME']
     version = os.environ['BUILD_VERSION']
     aws_hosted_zone = os.environ['AWS_HOSTED_ZONE']
@@ -435,7 +431,7 @@ def main():
     task_definition = json.loads(open('deployment/ecs-env.json', 'r').read())
     template = open(template_path, 'r').read()
 
-    deploy_ecs_service(app_name=app_name, env=env, realm=realm, cluster_name=cluster_name, version=version, aws_hosted_zone=aws_hosted_zone, base_path=base_path, config=config, task_definition=task_definition, template=template)
+    deploy_ecs_service(app_name=app_name, env=env, cluster_name=cluster_name, version=version, aws_hosted_zone=aws_hosted_zone, base_path=base_path, config=config, task_definition=task_definition, template=template)
 
 
 if __name__ == "__main__":

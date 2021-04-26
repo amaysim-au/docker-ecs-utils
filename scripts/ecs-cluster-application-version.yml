@@ -2,6 +2,12 @@ AWSTemplateFormatVersion: '2010-09-09'
 
 Description: ECS Cluster Application Version
 
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - E3002
+
 Parameters:
   Name:
     Type: String
@@ -84,6 +90,14 @@ Parameters:
   AlbScheme:
     Description: Is the ALB internal or internet-facing?
     Type: String
+  ECSServiceName:
+    Type: String
+  ECSServiceSecurityClassification:
+    Type: String
+  ECSServiceSecurityDataType:
+    Type: String
+  ECSServiceSecurityAccessibility:
+    Type: String
 
 Conditions:
   isAutoscaling: !Equals [ !Ref Autoscaling, 'Enable']
@@ -144,6 +158,16 @@ Resources:
         - ContainerName: !Sub "${Name}"
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref ALBTargetGroup
+      PropagateTags: SERVICE
+      Tags:
+        - Key: resource:name
+          Value: !Ref ECSServiceName
+        - Key: security:classification
+          Value: !Ref ECSServiceSecurityClassification
+        - Key: security:data-type
+          Value: !Ref ECSServiceSecurityDataType
+        - Key: security:accessibility
+          Value: !Ref ECSServiceSecurityAccessibility
 
   ServiceScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
@@ -160,6 +184,7 @@ Resources:
         "Fn::ImportValue": !Sub "ecs-${ClusterName}-ECSAutoscalingRoleArn"
       ScalableDimension: ecs:service:DesiredCount
       ServiceNamespace: ecs
+
   ServiceScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
     Condition: isAutoscaling
