@@ -113,9 +113,12 @@ def set_correct_service_size(cluster_name, app_name, version_stack_name, target_
     current_count = get_current_count(cluster_name=cluster_name, cluster_full_name=cluster_full_name, service_full_name=service_full_name)
     print('Live service has {} tasks, this version has {}.'.format(desired_count, current_count))
     if desired_count is None:
-        print('Number of running tasks is unknown, do not change.')
+        print('Number of desired running tasks is unknown, do not change.')
         return
-    elif current_count >= desired_count:
+    if current_count is None:
+        print('Number of current running tasks is unknown, do not change.')
+        return
+    if current_count >= desired_count:
         print('Number of running tasks ({}) requires no change.'.format(current_count))
         return
     print('Updating this version to match.')
