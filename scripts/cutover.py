@@ -115,10 +115,10 @@ def set_correct_service_size(cluster_name, app_name, version_stack_name, target_
     if desired_count is None:
         print('Number of desired running tasks is unknown, do not change.')
         return
-    elif current_count is None:
+    if current_count is None:
         print('Number of current running tasks is unknown, do not change.')
         return
-    elif current_count >= desired_count:
+    if current_count >= desired_count:
         print('Number of running tasks ({}) requires no change.'.format(current_count))
         return
     print('Updating this version to match.')
